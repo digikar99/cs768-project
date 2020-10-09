@@ -1,3 +1,11 @@
+# Setup
+
+See [https://tlienart.github.io/pub/julia/dev-pkg.html](https://tlienart.github.io/pub/julia/dev-pkg.html). Basically:
+
+```julia
+(@v1.4) pkg> dev GraphAttacks
+```
+
 
 # References
 
