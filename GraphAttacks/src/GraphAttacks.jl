@@ -93,13 +93,14 @@ function predict(train_graph::SimpleGraph, scorer, per_node::Bool=true)
             if u%100 == 0 println("Processed $u nodes") end
         end
     else
-        predictions=[]
+        predictions_dict={}
         Threads.@threads for u in 1:nv(train_graph)
-            append!(predictions,[
+            predictions_dict[u]=[
                     (u, v, scorer(g,u,v)) for v in u+1:nv(train_graph)
                     if !has_edge(train_graph, u, v)
-                ])
+                ]
             end
+        predictions=[predictions_dict[k] for k in keys(predictions_dict)]
         predictions=collect(Iterators.flatten(predictions))
         sort!(predictions, by = x -> x[3], rev = true)
     end        
