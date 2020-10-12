@@ -2,6 +2,7 @@ module GraphAttacks
 
 using LightGraphs
 using Random
+import ExportAll
 
 function create_simple_graph(filename="/home/shubhamkar/ram-disk/datasets/FBK_full.net")::SimpleGraph
     # In accordance with the format at https://noesis.ikor.org/datasets/link-prediction
@@ -44,13 +45,15 @@ function create_train_test_graph(graph::SimpleGraph,
     train, test
 end
 
-function adamic_adar(train_graph::SimpleGraph, u::Int, v::Int)::AbstractFloat
+function adamic_adar(train_graph::SimpleGraph, u::Int, v::Int)::Float64
     score = 0
     for n in common_neighbors(train_graph, u, v)
         # computing a neighbor_length list before hand doesn't seem to be
         # making a big difference in efficiency
         n_len = length(neighbors(train_graph, n))
-        score += 1 / log(n_len)
+        if n_len > 1
+            score += 1 / log(n_len)
+        end
     end
     score
 end
@@ -78,7 +81,41 @@ function average_precision(test_graph::SimpleGraph,
     end
 end
 
-function predict(train_graph::SimpleGraph, scorer)
+function predict(train_graph::SimpleGraph, scorer::String)
+    g = train_graph
+    predictions = Dict()
+
+    scorer_fn = nothing
+    if scorer == "adamic_adar"
+        scorer_fn = begin
+            inv_log    = begin
+                inv_log = zeros(nv(g))
+                for i = 1:nv(train_graph)
+                    num_neigh = length(neighbors(g, i))
+                    inv_log[i] = (num_neigh < 2 ? 0 : 1/log(num_neigh))
+                end
+                inv_log
+            end
+            adj_sparse = LightGraphs.LinAlg.adjacency_matrix(g)
+            v_inv_log  = adj_sparse .* inv_log
+            # println(size(adj_sparse), size(v_inv_log))
+            aa_mat     = adj_sparse * v_inv_log
+            (u, v) -> aa_mat[u, v]
+        end
+    end
+
+    Threads.@threads for u in 1:nv(train_graph)
+        predictions[u] = [
+            (u, v, scorer_fn(u,v)) for v in 1:nv(train_graph)
+            if !has_edge(train_graph, u, v)
+        ]
+        sort!(predictions[u], by = x -> x[3], rev = true)
+        if u%100 == 0 println("Processed $u nodes") end
+    end
+    predictions
+end
+
+function predict(train_graph::SimpleGraph, scorer::Function)
     g = train_graph
     predictions = Dict()
     # should "export JULIA_NUM_THREADS=n" in .bashrc to take advantage
@@ -115,16 +152,42 @@ function evaluate(train_graph::SimpleGraph,
     total_result/num_nodes
 end
 
+"""
+Returns a new graph, formed by randomly deleting edges from the graph
+train : graph, intended to be the training graph
+n_del : number of edges to delete
+"""
+function random_del(train::SimpleGraph, n_del::Int)
+    new_g = copy(train)
+
+    del_vec = Set(
+        Random.shuffle(
+            collect(1:ne(train))
+        )[1:n_del]
+    )
+
+    idx = 1
+    for e in edges(new_g)
+        if idx in del_vec
+            rem_edge!(new_g, e)
+        end
+        idx += 1
+    end
+    new_g
+end
+
+
 include("CTR.jl")
+
+ExportAll.@exportAll()
 
 # Example Usage:
 # g           = create_simple_graph("/home/shubhamkar/ram-disk/datasets/GRQ_test_0.net")
 # train, test = create_train_test_graph(g)
-# pred        = predict(train, adamic_adar)
+# pred        = predict(train, adamic_adar) # slower version
+# pred        = predict(train, "adamic_adar") # faster version
 # evaluate(train, test, pred, average_precision)
 # ctr         = closed_triad_removal(train, test, 10)
 # ctr_pred    = predict(ctr, adamic_adar)
 # evaluate(ctr, test, ctr_pred, average_precision)
 end
-
-

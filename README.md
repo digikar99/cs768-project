@@ -6,6 +6,13 @@ See [https://tlienart.github.io/pub/julia/dev-pkg.html](https://tlienart.github.
 (@v1.4) pkg> dev GraphAttacks
 ```
 
+# Development
+
+```julia
+(@v1.4) pkg> add Revise     # See https://timholy.github.io/Revise.jl/stable/config/
+(@v1.4) pkg> add ExportAll
+julia> using GraphAttacks
+```
 
 # References
 
