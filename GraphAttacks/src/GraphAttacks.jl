@@ -78,19 +78,32 @@ function average_precision(test_graph::SimpleGraph,
     end
 end
 
-function predict(train_graph::SimpleGraph, scorer)
+function predict(train_graph::SimpleGraph, scorer, per_node::Bool=true)
     g = train_graph
-    predictions = Dict()
-    # should "export JULIA_NUM_THREADS=n" in .bashrc to take advantage
-    # TODO: If needed, speed it up using type declarations?
-    Threads.@threads for u in 1:nv(train_graph)
-        predictions[u] = [
-            (u, v, scorer(g,u,v)) for v in 1:nv(train_graph)
-            if !has_edge(train_graph, u, v)
-        ]
-        sort!(predictions[u], by = x -> x[3], rev = true)
-        if u%100 == 0 println("Processed $u nodes") end
-    end
+    if per_node
+        predictions = Dict()
+        # should "export JULIA_NUM_THREADS=n" in .bashrc to take advantage
+        # TODO: If needed, speed it up using type declarations?
+        Threads.@threads for u in 1:nv(train_graph)
+            predictions[u] = [
+                (u, v, scorer(g,u,v)) for v in 1:nv(train_graph)
+                if !has_edge(train_graph, u, v)
+            ]
+            sort!(predictions[u], by = x -> x[3], rev = true)
+            if u%100 == 0 println("Processed $u nodes") end
+        end
+    else
+        predictions=[]
+        Threads.@threads for u in 1:nv(train_graph)
+            append!(predictions,[
+                    (u, v, scorer(g,u,v)) for v in u+1:nv(train_graph)
+                    if !has_edge(train_graph, u, v)
+                ])
+            end
+        predictions=collect(Iterators.flatten(predictions))
+        sort!(predictions, by = x -> x[3], rev = true)
+    end        
+
     predictions
 end
 
@@ -102,29 +115,35 @@ metric      -> a function that takes test_graph and a ranked_list as input and r
 function evaluate(train_graph::SimpleGraph,
                   test_graph::SimpleGraph,
                   predictions::Dict,
-                  metric::Function)
+                  metric::Function,
+                  per_node::Bool=true)
     total_result = 0.0
     num_nodes    = 0
-    for u = 1:nv(train_graph)
-        result = metric(test_graph, predictions[u])
-        if result != nothing
-            num_nodes    += 1
-            total_result += result
+    if per_node
+        for u = 1:nv(train_graph)
+            result = metric(test_graph, predictions[u])
+            if result != nothing
+                num_nodes    += 1
+                total_result += result
+            end
         end
+        total_result/num_nodes
+    else
+        metric(test_graph,predictions)
     end
-    total_result/num_nodes
 end
 
 include("CTR.jl")
 
 # Example Usage:
-# g           = create_simple_graph("/home/shubhamkar/ram-disk/datasets/GRQ_test_0.net")
-# train, test = create_train_test_graph(g)
-# pred        = predict(train, adamic_adar)
-# evaluate(train, test, pred, average_precision)
-# ctr         = closed_triad_removal(train, test, 10)
-# ctr_pred    = predict(ctr, adamic_adar)
-# evaluate(ctr, test, ctr_pred, average_precision)
+per_node=false
+g           = create_simple_graph("//home/chitrank/datasets_cs768_project/GRQ_test_0.net")
+train, test = create_train_test_graph(g)
+pred        = predict(train, adamic_adar,per_node)
+println(evaluate(train, test, pred, average_precision,per_node))
+ctr         = closed_triad_removal(train, test, 10)
+ctr_pred    = predict(ctr, adamic_adar,per_node)
+println(evaluate(ctr, test, ctr_pred, average_precision,per_node))
 end
 
 
