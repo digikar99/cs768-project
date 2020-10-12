@@ -142,7 +142,7 @@ g           = create_simple_graph("//home/chitrank/datasets_cs768_project/GRQ_te
 train, test = create_train_test_graph(g)
 pred        = predict(train, adamic_adar,per_node)
 println(evaluate(train, test, pred, average_precision,per_node))
-ctr         = closed_triad_removal(train, test, 10)
+ctr         = closed_triad_removal(train, test, 10
 ctr_pred    = predict(ctr, adamic_adar,per_node)
 println(evaluate(ctr, test, ctr_pred, average_precision,per_node))
 end
