@@ -4,6 +4,9 @@ using LightGraphs
 using Random
 import ExportAll
 
+# TODO: figure out how to change this from other modules, eg. Main/Base
+PER_NODE    = false # or true
+
 function create_simple_graph(filename="/home/shubhamkar/ram-disk/datasets/FBK_full.net")::SimpleGraph
     # In accordance with the format at https://noesis.ikor.org/datasets/link-prediction
     open(filename) do f
@@ -81,13 +84,12 @@ function average_precision(test_graph::SimpleGraph,
     end
 end
 
-function predict(train_graph::SimpleGraph, scorer::String)
-    g = train_graph
-    predictions = Dict()
+function predict(train_graph::SimpleGraph, scorer::String; per_node::Bool=PER_NODE)
+    # Keep this method in sync with the method just above
 
-    scorer_fn = nothing
-    if scorer == "adamic_adar"
-        scorer_fn = begin
+    g = train_graph
+    scorer_fn = begin
+        if scorer == "adamic_adar"
             inv_log    = begin
                 inv_log = zeros(nv(g))
                 for i = 1:nv(train_graph)
@@ -104,52 +106,84 @@ function predict(train_graph::SimpleGraph, scorer::String)
         end
     end
 
-    Threads.@threads for u in 1:nv(train_graph)
-        predictions[u] = [
-            (u, v, scorer_fn(u,v)) for v in 1:nv(train_graph)
-            if !has_edge(train_graph, u, v)
-        ]
-        sort!(predictions[u], by = x -> x[3], rev = true)
-        if u%100 == 0 println("Processed $u nodes") end
+    predictions = nothing
+    if per_node
+        predictions = Dict()
+        # should "export JULIA_NUM_THREADS=n" in .bashrc to take advantage
+        # TODO: If needed, speed it up using type declarations?
+        for u in 1:nv(train_graph)
+            predictions[u] = [
+                (u, v, scorer_fn(u,v)) for v in 1:nv(train_graph)
+                if !has_edge(train_graph, u, v)
+            ]
+            sort!(predictions[u], by = x -> x[3], rev = true)
+            # if u%100 == 0 println("Processed $u nodes") end
+        end
+    else
+        predictions=[]
+        for u in 1:nv(train_graph)
+            append!(predictions,[
+                (u, v, scorer_fn(u,v)) for v in u+1:nv(train_graph)
+                if !has_edge(train_graph, u, v)
+            ])
+        end
+        sort!(predictions, by = x -> x[3], rev = true)
     end
     predictions
 end
 
-function predict(train_graph::SimpleGraph, scorer::Function)
+function predict(train_graph::SimpleGraph, scorer::Function; per_node::Bool=PER_NODE)
+    # Keep this method in sync with the method just above
     g = train_graph
-    predictions = Dict()
-    # should "export JULIA_NUM_THREADS=n" in .bashrc to take advantage
-    # TODO: If needed, speed it up using type declarations?
-    Threads.@threads for u in 1:nv(train_graph)
-        predictions[u] = [
-            (u, v, scorer(g,u,v)) for v in 1:nv(train_graph)
-            if !has_edge(train_graph, u, v)
-        ]
-        sort!(predictions[u], by = x -> x[3], rev = true)
-        if u%100 == 0 println("Processed $u nodes") end
+    predictions = nothing
+    if per_node
+        predictions = Dict()
+        Threads.@threads for u in 1:nv(train_graph)
+            predictions[u] = [
+                (u, v, scorer_fn(u,v)) for v in 1:nv(train_graph)
+                if !has_edge(train_graph, u, v)
+            ]
+            sort!(predictions[u], by = x -> x[3], rev = true)
+            if u%100 == 0 println("Processed $u nodes") end
+        end
+    else
+        predictions=[]
+        Threads.@threads for u in 1:nv(train_graph)
+            append!(predictions,[
+                (u, v, scorer(g,u,v)) for v in u+1:nv(train_graph)
+                if !has_edge(train_graph, u, v)
+            ])
+        end
+        sort!(predictions, by = x -> x[3], rev = true)
     end
     predictions
 end
 
-"
+"""
 predictions -> a Dict mapping each node to the ranked_list with
                each entry of the form (u, v, score)
-metric      -> a function that takes test_graph and a ranked_list as input and returns a score
-"
+metric      -> a function that takes test_graph and a ranked_list as input
+               and returns a score
+"""
 function evaluate(train_graph::SimpleGraph,
                   test_graph::SimpleGraph,
-                  predictions::Dict,
-                  metric::Function)
-    total_result = 0.0
-    num_nodes    = 0
-    for u = 1:nv(train_graph)
-        result = metric(test_graph, predictions[u])
-        if result != nothing
-            num_nodes    += 1
-            total_result += result
+                  predictions,
+                  metric::Function;
+                  per_node::Bool=PER_NODE)
+    if per_node
+        total_result = 0.0
+        num_nodes    = 0
+        for u = 1:nv(train_graph)
+            result = metric(test_graph, predictions[u])
+            if result != nothing
+                num_nodes    += 1
+                total_result += result
+            end
         end
+        total_result/num_nodes
+    else
+        metric(test_graph, predictions)
     end
-    total_result/num_nodes
 end
 
 """
@@ -183,11 +217,12 @@ ExportAll.@exportAll()
 
 # Example Usage:
 # g           = create_simple_graph("/home/shubhamkar/ram-disk/datasets/GRQ_test_0.net")
+# g           = create_simple_graph("//home/chitrank/datasets_cs768_project/GRQ_test_0.net")
 # train, test = create_train_test_graph(g)
-# pred        = predict(train, adamic_adar) # slower version
+# pred        = predict(train, adamic_adar, per_node = True) # slower version
 # pred        = predict(train, "adamic_adar") # faster version
 # evaluate(train, test, pred, average_precision)
 # ctr         = closed_triad_removal(train, test, 10)
-# ctr_pred    = predict(ctr, adamic_adar)
-# evaluate(ctr, test, ctr_pred, average_precision)
+# ctr_pred    = predict(ctr, adamic_adar, per_node = true)
+# evaluate(ctr, test, ctr_pred, average_precision, per_node = true)
 end
