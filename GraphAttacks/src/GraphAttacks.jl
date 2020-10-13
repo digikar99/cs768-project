@@ -1,6 +1,7 @@
 module GraphAttacks
 
 using LightGraphs
+using LinearAlgebra
 using Random
 import ExportAll
 
@@ -48,19 +49,6 @@ function create_train_test_graph(graph::SimpleGraph,
     train, test
 end
 
-function adamic_adar(train_graph::SimpleGraph, u::Int, v::Int)::Float64
-    score = 0
-    for n in common_neighbors(train_graph, u, v)
-        # computing a neighbor_length list before hand doesn't seem to be
-        # making a big difference in efficiency
-        n_len = length(neighbors(train_graph, n))
-        if n_len > 1
-            score += 1 / log(n_len)
-        end
-    end
-    score
-end
-
 """
 Expects that sorted_v is a list of vertices corresponding to a pre-computed ranked_list
 Intended to be used by evaluate
@@ -84,11 +72,13 @@ function average_precision(test_graph::SimpleGraph,
     end
 end
 
-function predict(train_graph::SimpleGraph, scorer::String; per_node::Bool=PER_NODE)
+function predict(train_graph::SimpleGraph, scorer::String;
+                 per_node::Bool=PER_NODE, beta::AbstractFloat=0.001)
     # Keep this method in sync with the method just above
 
     g = train_graph
     scorer_fn = begin
+        adj_sparse = LightGraphs.LinAlg.adjacency_matrix(g)
         if scorer == "adamic_adar"
             inv_log    = begin
                 inv_log = zeros(nv(g))
@@ -98,11 +88,13 @@ function predict(train_graph::SimpleGraph, scorer::String; per_node::Bool=PER_NO
                 end
                 inv_log
             end
-            adj_sparse = LightGraphs.LinAlg.adjacency_matrix(g)
             v_inv_log  = adj_sparse .* inv_log
             # println(size(adj_sparse), size(v_inv_log))
             aa_mat     = adj_sparse * v_inv_log
             (u, v) -> aa_mat[u, v]
+        elseif scorer == "katz"            
+            katz_mat = inv(I(nv(g)) - beta * Matrix(adj_sparse)) - I(nv(g))
+            (u, v) -> katz_mat[u, v]
         end
     end
 
@@ -124,33 +116,6 @@ function predict(train_graph::SimpleGraph, scorer::String; per_node::Bool=PER_NO
         for u in 1:nv(train_graph)
             append!(predictions,[
                 (u, v, scorer_fn(u,v)) for v in u+1:nv(train_graph)
-                if !has_edge(train_graph, u, v)
-            ])
-        end
-        sort!(predictions, by = x -> x[3], rev = true)
-    end
-    predictions
-end
-
-function predict(train_graph::SimpleGraph, scorer::Function; per_node::Bool=PER_NODE)
-    # Keep this method in sync with the method just above
-    g = train_graph
-    predictions = nothing
-    if per_node
-        predictions = Dict()
-        Threads.@threads for u in 1:nv(train_graph)
-            predictions[u] = [
-                (u, v, scorer_fn(u,v)) for v in 1:nv(train_graph)
-                if !has_edge(train_graph, u, v)
-            ]
-            sort!(predictions[u], by = x -> x[3], rev = true)
-            if u%100 == 0 println("Processed $u nodes") end
-        end
-    else
-        predictions=[]
-        Threads.@threads for u in 1:nv(train_graph)
-            append!(predictions,[
-                (u, v, scorer(g,u,v)) for v in u+1:nv(train_graph)
                 if !has_edge(train_graph, u, v)
             ])
         end
