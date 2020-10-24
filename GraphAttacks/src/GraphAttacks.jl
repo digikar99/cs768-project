@@ -72,6 +72,8 @@ function average_precision(test_graph::SimpleGraph,
     end
 end
 
+include("Heuristics.jl")
+
 function predict(train_graph::SimpleGraph, scorer::Function;
                  per_node::Bool=PER_NODE, beta::AbstractFloat=0.001)
     # Keep this method in sync with the method just above
