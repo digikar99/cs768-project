@@ -61,5 +61,5 @@ function average_commute_time(graph::SimpleGraph)
             S[i, j] = L_plus[i,i] + L_plus[j,j] - 2 * L_plus[i,j]
         end
     end
-    S
+    1 ./ S
 end
