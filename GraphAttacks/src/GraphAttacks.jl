@@ -72,40 +72,26 @@ function average_precision(test_graph::SimpleGraph,
     end
 end
 
-function predict(train_graph::SimpleGraph, scorer::String;
+function predict(train_graph::SimpleGraph, scorer::Function;
                  per_node::Bool=PER_NODE, beta::AbstractFloat=0.001)
     # Keep this method in sync with the method just above
 
     g = train_graph
-    scorer_fn = begin
-        adj_sparse = LightGraphs.LinAlg.adjacency_matrix(g)
-        if scorer == "adamic_adar"
-            inv_log    = begin
-                inv_log = zeros(nv(g))
-                for i = 1:nv(train_graph)
-                    num_neigh = length(neighbors(g, i))
-                    inv_log[i] = (num_neigh < 2 ? 0 : 1/log(num_neigh))
-                end
-                inv_log
-            end
-            v_inv_log  = adj_sparse .* inv_log
-            # println(size(adj_sparse), size(v_inv_log))
-            aa_mat     = adj_sparse * v_inv_log
-            (u, v) -> aa_mat[u, v]
-        elseif scorer == "katz"            
-            katz_mat = inv(I(nv(g)) - beta * Matrix(adj_sparse)) - I(nv(g))
-            (u, v) -> katz_mat[u, v]
-        end
-    end
 
-    predictions = nothing
+    predictions  = nothing
+    score_matrix = if scorer == katz
+        scorer(train_graph, beta)
+    else
+        scorer(train_graph)
+    end
+    
     if per_node
         predictions = Dict()
         # should "export JULIA_NUM_THREADS=n" in .bashrc to take advantage
         # TODO: If needed, speed it up using type declarations?
         for u in 1:nv(train_graph)
             predictions[u] = [
-                (u, v, scorer_fn(u,v)) for v in 1:nv(train_graph)
+                (u, v, score_matrix[u,v]) for v in 1:nv(train_graph)
                 if !has_edge(train_graph, u, v)
             ]
             sort!(predictions[u], by = x -> x[3], rev = true)
@@ -115,7 +101,7 @@ function predict(train_graph::SimpleGraph, scorer::String;
         predictions=[]
         for u in 1:nv(train_graph)
             append!(predictions,[
-                (u, v, scorer_fn(u,v)) for v in u+1:nv(train_graph)
+                (u, v, score_matrix[u,v]) for v in u+1:nv(train_graph)
                 if !has_edge(train_graph, u, v)
             ])
         end
@@ -184,9 +170,8 @@ ExportAll.@exportAll()
 # g           = create_simple_graph("/home/shubhamkar/ram-disk/datasets/GRQ_test_0.net")
 # g           = create_simple_graph("//home/chitrank/datasets_cs768_project/GRQ_test_0.net")
 # train, test = create_train_test_graph(g)
-# pred        = predict(train, adamic_adar, per_node = True) # slower version
-# pred        = predict(train, "adamic_adar") # faster version
-# evaluate(train, test, pred, average_precision)
+# pred        = predict(train, adamic_adar, per_node = true)
+# evaluate(train, test, pred, average_precision, per_node = true)
 # ctr         = closed_triad_removal(train, test, 10)
 # ctr_pred    = predict(ctr, adamic_adar, per_node = true)
 # evaluate(ctr, test, ctr_pred, average_precision, per_node = true)
