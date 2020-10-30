@@ -13,7 +13,7 @@ function adamic_adar(graph::SimpleGraph)
         end
         inv_log
     end
-    
+
     v_inv_log  = adj_sparse .* inv_log
     # println(size(adj_sparse), size(v_inv_log))
     aa_mat     = adj_sparse * v_inv_log
@@ -27,6 +27,42 @@ function katz(graph::SimpleGraph, beta::AbstractFloat)
     katz_mat
 end
 
+function katz(graph::SimpleGraph, beta::AbstractFloat, u::Int, v::Int, epsilon::Float64=1e-10)
+    g = graph
+    adj_sparse = LightGraphs.LinAlg.adjacency_matrix(g)
+
+    orig_adj  = float(Matrix(adj_sparse))
+    orig_beta = beta
+    adj = reshape(orig_adj[u, 1:end], (1,nv(g)))
+    katz = 0.0
+    while beta > epsilon
+        # println(i)
+        katz += beta * adj[v]
+        adj  *= orig_adj
+        beta *= orig_beta
+    end
+    katz
+end
+
+
+function katz(adj_matrix::Matrix, beta::AbstractFloat, u::Int, v::Int, epsilon::Float64=1e-10)
+    # g = graph
+    # adj_sparse = LightGraphs.LinAlg.adjacency_matrix(g)
+
+    # orig_adj  = float(Matrix(adj_sparse))
+    orig_adj  = adj_matrix
+    orig_beta = beta
+    adj = reshape(orig_adj[u, 1:end], (1, size(adj_matrix, 1)))
+    katz = 0.0
+    while beta > epsilon
+        # println(i)
+        katz += beta * adj[v]
+        adj  *= orig_adj
+        beta *= orig_beta
+    end
+    katz
+end
+
 # """
 #     Assumes that the graph is connected
 # """
@@ -36,7 +72,7 @@ end
 #     stochastic_matrix = adj ./ sum(adj, dims=1)
 #     eigen_mat = eigvecs(stochastic_matrix)
 #     stationary_distribution = eigen_mat[:, end]
-    
+
 # end
 
 function average_commute_time(graph::SimpleGraph)
@@ -52,7 +88,7 @@ function average_commute_time(graph::SimpleGraph)
     L = Matrix(D) .- Matrix(A)
 
     L_plus = pinv(L)
-    
+
     S = zeros((num_vertices, num_vertices))
     for i = 1:num_vertices
         for j = 1:num_vertices

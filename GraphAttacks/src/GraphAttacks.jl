@@ -5,6 +5,8 @@ using LinearAlgebra
 using Random
 import ExportAll
 
+scale_free = LightGraphs.SimpleGraphs.static_scale_free
+
 # TODO: figure out how to change this from other modules, eg. Main/Base
 PER_NODE    = false # or true
 
@@ -138,6 +140,8 @@ function evaluate(train_graph::SimpleGraph,
         metric(test_graph, predictions)
     end
 end
+
+include("Greedy.jl")
 
 """
 Returns a new graph, formed by randomly deleting edges from the graph
