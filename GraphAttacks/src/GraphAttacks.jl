@@ -76,9 +76,10 @@ end
 
 include("Heuristics.jl")
 
+include("SRW.jl")
+
 function predict(train_graph::SimpleGraph, scorer::Function;
                  per_node::Bool=PER_NODE, beta::AbstractFloat=0.001)
-    # Keep this method in sync with the method just above
 
     g = train_graph
 
