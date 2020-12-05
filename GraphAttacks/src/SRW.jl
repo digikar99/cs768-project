@@ -2,6 +2,7 @@
 module SRW
 
 using Distances
+using LinearAlgebra
 using LightGraphs
 
 # The following code is based on: https://arxiv.org/abs/1011.4071 ##############
@@ -46,9 +47,10 @@ end
 
 function make_SRW(graph, node_features;
                   restart_probability=0.1, weights=nothing)
+    node_features = node_features[1:nv(graph), :]
     num_nodes, num_features = size(node_features)
     # TODO: Handle the case wherein edge_strength_function is not a dot product
-    num_weights = num_features
+num_weights = num_features
     if weights == nothing weights = zeros(num_weights) end
     
     SupervisedRandomWalker(
@@ -65,7 +67,7 @@ function make_SRW(graph, node_features;
 end
 
 function edge_features(srw::SupervisedRandomWalker, u, v)
-    @. abs(srw.node_features[u] - srw.node_features[v])
+    @. abs(srw.node_features[u, :] - srw.node_features[v, :])
 end
 
 "The f_w(psi_uv) of the paper"
@@ -94,8 +96,7 @@ function predict(srw::SupervisedRandomWalker)
     function score_node_neighbors(node)
         u = node
         for v = 1:num_nodes
-            d      = node_features[v,:]
-            psi_uv = edge_features(u, d)
+            psi_uv = edge_features(srw, u, v)
             a_uv   = edge_strength_function(weights, psi_uv)
             edge_strengths[u,v] = a_uv
             unrestarted_scores[u,v] = a_uv
@@ -147,7 +148,7 @@ function loss(srw::SupervisedRandomWalker,
     for s = 1:num_nodes
         for d in neighbors(graph, s)
             for l = 1:num_nodes
-                if not(has_edge(s, l))
+                if !(has_edge(graph, s, l))
                     pd = stationary_scores[s,d]
                     pl = stationary_scores[s,l]
                     total_loss += loss_fn(pd, pl)
@@ -156,7 +157,7 @@ function loss(srw::SupervisedRandomWalker,
         end
     end
 
-    return total_loss, total_loss + norm2(srw.weights)
+    return total_loss, total_loss + norm(srw.weights, 2)
 end
 
 # ------------------------------------------------------------------------------
@@ -247,7 +248,7 @@ function grad_term_2(srw::SupervisedRandomWalker, loss_fn_grad=hinge_loss_grad)
         cache_dQ_by_dw(srw, s)
         for d in neighbors(g, s)
             for l = 1:num_nodes
-                if not(has_edge(g, s, l))
+                if !(has_edge(g, s, l))
                     pd = stationary_scores[s,d]
                     pl = stationary_scores[s,l]
                     d_pd = dp_by_dw(srw, s, d)
@@ -263,7 +264,7 @@ function grad_term_2(srw::SupervisedRandomWalker, loss_fn_grad=hinge_loss_grad)
 end
 
 # TODO: Add option to avoid regularization
-function fit(srw::SupervisedRandomWalker, lambda, target_loss=1e-3, learning_rate=0.1)
+function fit(srw::SupervisedRandomWalker, target_loss=1e-3, learning_rate=0.1)
     graph         = srw.graph
     node_features = srw.node_features
     weights       = srw.weights

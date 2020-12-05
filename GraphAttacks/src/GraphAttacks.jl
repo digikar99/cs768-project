@@ -75,7 +75,7 @@ function average_precision(test_graph::SimpleGraph,
 end
 
 include("Heuristics.jl")
-
+include("CiteSeer.jl")
 include("SRW.jl")
 
 function predict(train_graph::SimpleGraph, scorer::Function;
