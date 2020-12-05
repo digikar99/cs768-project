@@ -2,7 +2,7 @@ module CiteSeer
 # Preprocessing code for CiteSeer data downloaded from
 # https://linqs-data.soe.ucsc.edu/public/lbc/citeseer.tgz
 
-using LightGraphs, MetaGraphs
+using LightGraphs, MetaGraphs, LinearAlgebra
 
 """
 Returns two values: the graph and a dictionary of mapping from paper-id to graph-node
@@ -20,7 +20,7 @@ function read_into_graph(filename, num_nodes=nothing)
         end
         text_to_id[text_id]
     end
-    
+
     open(filename) do f
         while !eof(f)
             split_line = split(readline(f))
@@ -45,95 +45,95 @@ function read_into_graph(filename, num_nodes=nothing)
     graph, text_to_id
 end
 
-function read_features(filename, text_to_id, num_features=nothing)
+function read_features(filename, graph, num_features=nothing)
     features = nothing
-    num_total_nodes = length(text_to_id)
-    
+    num_total_features = nothing
+    num_total_nodes = nv(graph)
+
     open(filename) do f
         split_line = split(readline(f))
+        num_total_features = length(split_line[2:end-1])
         if num_features == nothing num_features = length(split_line[2:end-1]) end
-        features = zeros(Bool, num_total_nodes, num_features)
+        features = zeros(Bool, num_total_nodes, num_total_features)
     end
 
+    i = 0
     open(filename) do f
-        while !eof(f)
+        while !eof(f) # && i < 5
+            i += 1
             # Should be possible to speed up by avoiding allocations
             split_line = split(readline(f))
-            id = text_to_id[split_line[1]]
-            for feature_id = 1:num_features
-                features[id, feature_id] = parse(Bool, split_line[1+feature_id])
+            label = split_line[1]
+            # println("Line $label")
+            if ! isempty(filter_vertices(graph, :label, label))
+                # println("Reading $label")
+                id = graph[label, :label]
+                for feature_id = 1:num_total_features
+                    features[id, feature_id] = parse(Bool, split_line[1+feature_id])
+                end
             end
         end
     end
-    
-    features
+
+    # num_features should affect SVD
+
+    F = svd(features)
+    F.U[:, 1:num_features]
 end
 
-function get_connected_components(graph, undirected=false)
-    # TODO: Complete the undirected version
-    components = Set()
-    
+function ensure_vertex!(graph, label)
+    if isempty(filter_vertices(graph, :label, label))
+        add_vertex!(graph)
+        set_prop!(graph, nv(graph), :label, label)
+    end
+end
+
+function get_label(graph, vertex) get_prop(graph, vertex, :label) end
+
+function extract_largest_connected_component(graph::MetaDiGraph, undirected=false, k=1)
+    new_g = nothing
+
     if undirected
+        new_g = MetaGraph()
         graph = MetaGraph(graph)
+    else
+        new_g = MetaDiGraph()
     end
-    
-    for e in edges(graph)
-        # print(src(e), " ", dst(e), " ")
-        u = get_prop(graph, src(e), :label)
-        v = get_prop(graph, dst(e), :label)
-        g_u, g_v = nothing, nothing
-        for g in components
-            if ! isempty(filter_vertices(g, :label, u))
-                g_u = g
-            end
-            break
-        end
-        for g in components
-            if ! isempty(filter_vertices(g, :label, v))
-                g_v = g
-            end
-            break
-        end
-        
-        if g_u == nothing && g_v == nothing
-            tmp_g = MetaDiGraph(2)
-            set_indexing_prop!(tmp_g, :label)
-            # println(u, " ", v, " ", tmp_g)
-            set_prop!(tmp_g, 1, :label, u)
-            set_prop!(tmp_g, 2, :label, v)
-            push!(components, tmp_g)
-        elseif g_u != nothing && g_v != nothing
-            tmp_g = join(g_u, g_v)
-            delete!(components, g_u)
-            delete!(components, g_v)
-            push!(components, tmp_g)
-        elseif g_u != nothing
-            add_vertex!(g_u)
-            set_prop!(g_u, nv(g_u), :label, v)
-            i_u = g_u[u, :label]
-            i_v = g_u[v, :label]
-            add_edge!(g_u, i_u, i_v)
-        elseif g_v != nothing
-            add_vertex!(g_v)
-            set_prop!(g_v, nv(g_v), :label, u)
-            i_u = g_v[u, :label]
-            i_v = g_v[v, :label]
-            add_edge!(g_v, i_u, i_v)
+    set_indexing_prop!(new_g, :label)
+
+    ccs = sort!(
+        weakly_connected_components(graph),
+        by = cc -> length(cc),
+        rev=true
+    )
+    required = ccs[k]
+
+    new_vertices = Set(required)
+    for u in new_vertices
+        label_u = get_label(graph, u)
+        # The neighbors are a part of the connected component containing u
+        for v in neighbors(graph, u)
+            label_v = get_label(graph, v)
+            ensure_vertex!(new_g, label_u)
+            ensure_vertex!(new_g, label_v)
+            add_edge!(new_g, u, v)
         end
     end
-    components
+
+    new_g
 end
 
-function get_largest_component(components::Set)
-    max_size = 0
-    max_component = nothing
-    for c in components
-        if length(c) > max_size
-            max_size = length(c)
-            max_component = c
+function trim(graph, degree_lower_bound=2)
+    graph = copy(graph)
+    current_vertex_idx = 1
+    while current_vertex_idx <= nv(graph)
+        if degree(graph, current_vertex_idx) < degree_lower_bound
+            rem_vertex!(graph, current_vertex_idx)
+        else
+            current_vertex_idx += 1
         end
     end
-    max_component
+    graph
 end
 
-end # module Citeseer
+end # module CiteSeer
