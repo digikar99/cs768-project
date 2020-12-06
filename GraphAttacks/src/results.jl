@@ -1,6 +1,6 @@
 using GraphAttacks
 using Plots
-
+using LightGraphs
 # can you check this? sclae free formulation seemsto be depcreceated
 # V=100
 # E=200
@@ -44,24 +44,55 @@ end
 
 # g           = create_simple_graph("/home/shubhamkar/ram-disk/datasets/GRQ_test_0.net")
 g           = create_simple_graph("//home/chitrank/cs768_datasets/datasets/GRQ_test_0.net")
-budgets=[10 12 14 16 18 20]
+budgets=[2 4 6 8]
 train, test = create_train_test_graph(g)
-train1=SimpleGraph(train)	
-pred_original        = predict(train, adamic_adar, per_node = true)
-acc_original=evaluate(train, test, pred, average_precision, per_node = true)
-ctr         = closed_triad_removal(train, test, budgets)
-acc_perturbed_AA=[]
-acc_perturbed_katz=[]
+train1      = SimpleGraph(train)
+pred_original = predict(train, adamic_adar, per_node = true)
+acc_original  = evaluate(train, test, pred_original, average_precision, per_node = true)
+ctr           = closed_triad_removal(train, test, budgets)
+println(ctr)
+
+acc_perturbed_AA   = []
+acc_perturbed_katz = []
 for perturbed_graph in ctr
 	pred    = predict(perturbed_graph, adamic_adar, per_node = true)
 	append!(acc_perturbed_AA,evaluate(perturbed_graph, test, pred, average_precision, per_node = true))
 	pred    = predict(perturbed_graph, katz, per_node = true)
 	append!(acc_perturbed_katz,evaluate(perturbed_graph, test, pred, average_precision, per_node = true))
-vals=zeros(length(budgets),2)
-vals[:,1]=acc_perturbed_AA
-vals[:,2]=acc_perturbed_katz
-p=plot(budgets,vals,label=["AA","katz"],title="Acc vs budgets")
-xlabel!(p,"budgets")
-ylabel!(p,"accuracy (MAP)")
-display(p)
+end
+println(acc_perturbed_AA)
+println(acc_perturbed_katz)
+labels=["AA","katz"]
+open("results.txt","w") do io
+	for v in budgets
+		write(io,string(v));
+		write(io," ");
+	end
+
+	write(io,"\n");
+	for v in labels
+		write(io,v);
+		write(io," ");
+	end
+
+	write(io,"\n");
+	for v in acc_perturbed_AA
+		write(io,string(v));
+		write(io," ");
+	end
+
+	write(io,"\n");
+	for v in acc_perturbed_katz
+		write(io,string(v));
+		write(io," ");
+	end
+end
+
+# vals=zeros(length(budgets),2)
+# vals[:,1]=acc_perturbed_AA
+# vals[:,2]=acc_perturbed_katz
+# p=plot(budgets,vals,label=["AA","katz"],title="Acc vs budgets")
+# xlabel!(p,"budgets")
+# ylabel!(p,"accuracy (MAP)")
+# display(p)
 

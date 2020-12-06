@@ -59,7 +59,7 @@ function closed_triad_removal(train_graph::SimpleGraph,
             end
             u, v = edge_with_max_score
             rem_edge!(train_graph, u, v)
-            if iter<length(budgets) && b==convert(Int,budgets[iter])
+            if iter<=length(budgets) && b==convert(Int,budgets[iter])
                 put!(channel,SimpleGraph(train_graph))
                 iter+=1
             end
