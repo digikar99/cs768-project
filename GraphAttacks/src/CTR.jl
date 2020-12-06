@@ -17,7 +17,7 @@ end
 
 function closed_triad_removal(train_graph::SimpleGraph,
                               test_graph::SimpleGraph,
-                              budget)
+                              budgets)
     # removable = begin
     #     s = Set()
     #     for e in edges(train_graph)
@@ -28,37 +28,44 @@ function closed_triad_removal(train_graph::SimpleGraph,
     # end
 
     train_graph = copy(train_graph)
-    
-    for b in 1:budget
+    iter=1
+    Channel() do channel
 
-        println(b)
-        
-        scores = begin
-            d = Dict()
-            for e in edges(train_graph)
-                d[sort!([src(e), dst(e)])] = 0 # assumes src <= dst
+        for b in 1:maximum(budgets)
+
+            println(b)
+            
+            scores = begin
+                d = Dict()
+                for e in edges(train_graph)
+                    d[sort!([src(e), dst(e)])] = 0 # assumes src <= dst
+                end
+                d
             end
-            d
-        end
 
-        edge_with_max_score = begin
-            for e in edges(test_graph)
-                u = src(e)
-                v = dst(e)
-                # TODO: This allocates memory
-                for n in union(neighbors(train_graph, u), neighbors(train_graph, v))
-                    if has_edge(train_graph, u, n) && has_edge(train_graph, v, n)
-                        scores[sort!([u,n])] += 1
-                        scores[sort!([v,n])] += 1
+            edge_with_max_score = begin
+                for e in edges(test_graph)
+                    u = src(e)
+                    v = dst(e)
+                    # TODO: This allocates memory
+                    for n in union(neighbors(train_graph, u), neighbors(train_graph, v))
+                        if has_edge(train_graph, u, n) && has_edge(train_graph, v, n)
+                            scores[sort!([u,n])] += 1
+                            scores[sort!([v,n])] += 1
+                        end
                     end
                 end
+                argmaximum(e->scores[e], keys(scores))
             end
-            argmaximum(e->scores[e], keys(scores))
+            u, v = edge_with_max_score
+            rem_edge!(train_graph, u, v)
+            if iter<length(budgets) && b==convert(Int,budgets[iter])
+                put!(channel,SimpleGraph(train_graph))
+                iter+=1
+            end
         end
-        u, v = edge_with_max_score
-        rem_edge!(train_graph, u, v)
     end
 
-    train_graph
+    # train_graph
 end
 
