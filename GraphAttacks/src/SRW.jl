@@ -9,14 +9,15 @@ using Random
 # The following code is based on: https://arxiv.org/abs/1011.4071 ##############
 
 function principle_eigenvector(matrix, eps=1e-6)
+    # eigen(matrix).vectors[:, end]
     # Power iteration to find principle eigenvector:
     # https://en.wikipedia.org/wiki/Power_iteration
     prev = rand(size(matrix,1))
     next = rand(size(matrix,1))
-    matrixT = transpose(matrix)
+    # matrixT = transpose(matrix)
     while maximum(abs.(next-prev))>eps
-        prev = next
-        next = matrixT * prev
+        prev .= next
+        next = matrix * prev
         next ./= norm(next)
         # println(prev, " ", next, " ", maximum(abs.(next-prev)))
     end
@@ -58,8 +59,12 @@ function make_SRW(graph, node_features;
     node_features = node_features[1:nv(graph), :]
     num_nodes, num_features = size(node_features)
     # TODO: Handle the case wherein edge_strength_function is not a dot product
-    num_weights = num_features
+    num_weights = 2*num_features
     if weights == nothing weights = rand(num_weights) end
+
+    # for v=1:num_nodes # normalize
+        # node_features[v,:] ./= sum(node_features[v,:])
+    # end
 
     SupervisedRandomWalker(
         weights,
@@ -91,7 +96,8 @@ function reset(srw::SupervisedRandomWalker)
 end
 
 function edge_features(srw::SupervisedRandomWalker, u, v)
-    @. abs(srw.node_features[u, :] - srw.node_features[v, :])
+    # srw.node_features[u,:] .* srw.node_features[v,:]
+    vcat(srw.node_features[u,:], srw.node_features[v,:])
 end
 
 "The f_w(psi_uv) of the paper"
@@ -163,6 +169,7 @@ function hinge_loss_grad(larger, smaller) smaller>larger end
 Returns two values: unregularized loss, regularized loss
 """
 
+# TODO: Incorporate lambda
 function loss(srw::SupervisedRandomWalker,
               loss_fn::Function = hinge_loss)
 
@@ -246,8 +253,9 @@ function cache_dp_by_dw(srw::SupervisedRandomWalker, start_node, eps=1e-3)
     # srw.dQ_by_dw already corresponds to the start node by cache_dQ_by_dw
 
     # TODO: Are these necessary? These seem to cause a large amount of allocation
+    # rand!(dp_by_dw)
     dp_by_dw .= srw.RAND_V_BY_W_1
-    new_dp_by_dw .= srw.RAND_V_BY_W_2
+    # new_dp_by_dw .= srw.RAND_V_BY_W_2
 
     # Q_tmp[:, start_node] .+= alpha
     i = 0
@@ -295,6 +303,7 @@ function grad_term_2(srw::SupervisedRandomWalker, loss_fn_grad=hinge_loss_grad)
     print("  Calculating gradient's second term")
     current_progress_id = 0
     for s = 1:num_nodes
+        print(s, " ")
         # TODO: Handle each weight separately to save some space
         if floor(s/PROGRESS_PRINT_INTERVAL - current_progress_id) > 1
             current_progress_id = floor(s/PROGRESS_PRINT_INTERVAL)
@@ -350,13 +359,13 @@ end
 end # end SRW module
 
 
-fcon = "/home/shubhamkar/ram-disk/citeseer/citeseer.content"
-fcites = "/home/shubhamkar/ram-disk/citeseer/citeseer.cites"
-mg, d = cs.read_into_graph(fcites)
-lg = cs.extract_largest_connected_component(mg, true)
-tg = cs.trim(lg, 5)
-features = cs.read_features(fcon, tg, 100)
-srw = SRW.make_SRW(tg, features)
+# fcon = "/home/shubhamkar/ram-disk/citeseer/citeseer.content"
+# fcites = "/home/shubhamkar/ram-disk/citeseer/citeseer.cites"
+# mg, d = cs.read_into_graph(fcites)
+# lg = cs.extract_largest_connected_component(mg, true)
+# tg = cs.trim(lg, 5)
+# features = cs.read_features(fcon, tg, 100)
+# srw = SRW.make_SRW(tg, features)
 # SRW.predict(srw)
 # SRW.loss(srw)
 # SRW.fit(srw)
