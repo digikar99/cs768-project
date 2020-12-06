@@ -8,17 +8,21 @@ using Random
 
 # The following code is based on: https://arxiv.org/abs/1011.4071 ##############
 
+MAX_ITERATIONS = 10000
+
 function principle_eigenvector(matrix, eps=1e-6)
     # eigen(matrix).vectors[:, end]
     # Power iteration to find principle eigenvector:
     # https://en.wikipedia.org/wiki/Power_iteration
     prev = rand(size(matrix,1))
     next = rand(size(matrix,1))
+    iter = 0
     # matrixT = transpose(matrix)
-    while maximum(abs.(next-prev))>eps
+    while maximum(abs.(next-prev))>eps && iter < MAX_ITERATIONS
         prev .= next
         next = matrix * prev
         next ./= norm(next)
+        iter += 1
         # println(prev, " ", next, " ", maximum(abs.(next-prev)))
     end
     return next
@@ -260,8 +264,8 @@ function cache_dp_by_dw(srw::SupervisedRandomWalker, start_node, eps=1e-3)
     # Q_tmp[:, start_node] .+= alpha
     i = 0
     for k = 1:num_weights
-        while maximum(abs.(new_dp_by_dw[:,k] - dp_by_dw[:,k])) > eps # && i<5
-            # i += 1
+        while maximum(abs.(new_dp_by_dw[:,k] - dp_by_dw[:,k])) > eps && i<MAX_ITERATIONS
+            i += 1
             # println()
             # println("dp_by_dw: ", dp_by_dw[1:10,k])
             # println("new_dp_by_dw: ", new_dp_by_dw[1:10,k])
@@ -287,8 +291,6 @@ function cache_dp_by_dw(srw::SupervisedRandomWalker, start_node, eps=1e-3)
     # Q_tmp[:, start_node] .-= alpha
 end
 
-PROGRESS_PRINT_INTERVAL = 2
-
 function grad_term_2(srw::SupervisedRandomWalker, loss_fn_grad=hinge_loss_grad)
     # The second main term of the gradient summing over s and l,d
 
@@ -301,14 +303,9 @@ function grad_term_2(srw::SupervisedRandomWalker, loss_fn_grad=hinge_loss_grad)
     dp_by_dw          = srw.dp_by_dw
 
     print("  Calculating gradient's second term")
-    current_progress_id = 0
     for s = 1:num_nodes
         print(s, " ")
         # TODO: Handle each weight separately to save some space
-        if floor(s/PROGRESS_PRINT_INTERVAL - current_progress_id) > 1
-            current_progress_id = floor(s/PROGRESS_PRINT_INTERVAL)
-            print(".")
-        end
         cache_dQ_by_dw(srw, s)
         cache_dp_by_dw(srw, s)
         # println(dp_by_dw)
