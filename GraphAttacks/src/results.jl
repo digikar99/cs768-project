@@ -43,8 +43,9 @@ function predict_using_embeddings(train_graph::SimpleGraph,embeddings,
 end
 
 # g           = create_simple_graph("/home/shubhamkar/ram-disk/datasets/GRQ_test_0.net")
+dataset="GRQ"
 g           = create_simple_graph("//home/chitrank/cs768_datasets/datasets/GRQ_test_0.net")
-budgets=[2 4 6 8]
+budgets=[2 4]
 train, test = create_train_test_graph(g)
 train1      = SimpleGraph(train)
 pred_original = predict(train, adamic_adar, per_node = true)
@@ -52,6 +53,16 @@ acc_original  = evaluate(train, test, pred_original, average_precision, per_node
 ctr           = closed_triad_removal(train, test, budgets)
 println(ctr)
 
+
+# labels=["AA","katz"]
+method="CTR"
+method_name_to_method_call_dict=Dict("CTR"=>closed_triad_removal,"OTC"=>nothing,"random"=>random_del,"katz"=>greedy_katz,
+	"CN"=>greedy_katz,"NEA"=>nothing)
+method_name_to_prediction_call_dict=Dict("CTR"=>predict,"OTC"=>predict,"random"=>predict,"katz"=>predict,
+	"CN"=>predict,"NEA"=>nothing)
+
+# labels=["random","Method"]
+plot_labels=["AA","katz"]
 acc_perturbed_AA   = []
 acc_perturbed_katz = []
 for perturbed_graph in ctr
@@ -60,17 +71,18 @@ for perturbed_graph in ctr
 	pred    = predict(perturbed_graph, katz, per_node = true)
 	append!(acc_perturbed_katz,evaluate(perturbed_graph, test, pred, average_precision, per_node = true))
 end
-println(acc_perturbed_AA)
-println(acc_perturbed_katz)
-labels=["AA","katz"]
-open("results.txt","w") do io
+# println(acc_perturbed_AA)
+# println(acc_perturbed_katz)
+combined_plot_labels=join(plot_labels,"_VS_")
+out_file="$(dataset)_$(method)_$(plot_labels).txt"
+open(out_file,"w") do io
 	for v in budgets
 		write(io,string(v));
 		write(io," ");
 	end
 
 	write(io,"\n");
-	for v in labels
+	for v in plot_labels
 		write(io,v);
 		write(io," ");
 	end
