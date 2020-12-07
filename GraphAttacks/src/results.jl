@@ -6,17 +6,18 @@ using LightGraphs
 # E=200
 # graph=scale_free(V,E)
 function cosine_sim(embeddings,dim_axis=1)
-	norm_embeddings=embeddings./sqrt.(sum((embeddings.*embeddings),dims=dim_axis))
-	transpose(norm_embeddings)*norm_embeddings
+  norm_embeddings=embeddings./sqrt.(sum((embeddings.*embeddings),dims=dim_axis))
+  transpose(norm_embeddings)*norm_embeddings
 end
+
 function predict_using_embeddings(train_graph::SimpleGraph,embeddings,
-                 per_node::Bool=PER_NODE)
+                                  per_node::Bool=PER_NODE)
 
     g = train_graph
 
     predictions  = nothing
     score_matrix = cosine_sim(embeddings)
-    
+
     if per_node
         predictions = Dict()
         # should "export JULIA_NUM_THREADS=n" in .bashrc to take advantage
@@ -66,10 +67,17 @@ plot_labels=["AA","katz"]
 acc_perturbed_AA   = []
 acc_perturbed_katz = []
 for perturbed_graph in ctr
-	pred    = predict(perturbed_graph, adamic_adar, per_node = true)
-	append!(acc_perturbed_AA,evaluate(perturbed_graph, test, pred, average_precision, per_node = true))
-	pred    = predict(perturbed_graph, katz, per_node = true)
-	append!(acc_perturbed_katz,evaluate(perturbed_graph, test, pred, average_precision, per_node = true))
+    global acc_perturbed_AA, acc_perturbed_katz
+    pred    = predict(perturbed_graph, adamic_adar, per_node = true)
+    push!(
+        acc_perturbed_AA,
+        evaluate(perturbed_graph, test, pred, average_precision, per_node = true)
+    )
+    pred    = predict(perturbed_graph, katz, per_node = true)
+    push!(
+        acc_perturbed_katz,
+        evaluate(perturbed_graph, test, pred, average_precision, per_node = true)
+    )
 end
 # println(acc_perturbed_AA)
 # println(acc_perturbed_katz)
@@ -87,24 +95,18 @@ open(out_file,"w") do io
 		write(io," ");
 	end
 
-	write(io,"\n");
-	for v in acc_perturbed_AA
-		write(io,string(v));
-		write(io," ");
-	end
 
-	write(io,"\n");
-	for v in acc_perturbed_katz
-		write(io,string(v));
-		write(io," ");
-	end
+    write(io,"\n");
+    for v in acc_perturbed_AA
+        write(io,string(v));
+        write(io," ");
+    end
+
+    write(io,"\n");
+    for v in acc_perturbed_katz
+        write(io,string(v));
+        write(io," ");
+    end
 end
 
-# vals=zeros(length(budgets),2)
-# vals[:,1]=acc_perturbed_AA
-# vals[:,2]=acc_perturbed_katz
-# p=plot(budgets,vals,label=["AA","katz"],title="Acc vs budgets")
-# xlabel!(p,"budgets")
-# ylabel!(p,"accuracy (MAP)")
-# display(p)
 
