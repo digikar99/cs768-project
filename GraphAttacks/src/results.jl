@@ -1,5 +1,6 @@
-using GraphAttacks, Plots, LightGraphs
-
+using GraphAttacks
+using Plots
+using LightGraphs
 # can you check this? sclae free formulation seemsto be depcreceated
 # V=100
 # E=200
@@ -42,12 +43,11 @@ function predict_using_embeddings(train_graph::SimpleGraph,embeddings,
     predictions
 end
 
-# g           = create_simple_graph("/home/shubhamkar/ram-disk/datasets/GRQ_test_0.net")
-g           = create_simple_graph("//home/chitrank/cs768_datasets/datasets/GRQ_test_0.net")
-# budgets       = [10]
-budgets     = [10, 12, 14, 16, 18, 20]
-train, test = create_train_test_graph(g)
-train1      = SimpleGraph(train)
+g           = create_simple_graph("/home/shubhamkar/ram-disk/datasets/GRQ_test_0.net")
+# g             = create_simple_graph("//home/chitrank/cs768_datasets/datasets/GRQ_test_0.net")
+budgets       = [2 4 6 8]
+train, test   = create_train_test_graph(g)
+train1        = SimpleGraph(train)
 pred_original = predict(train, adamic_adar, per_node = true)
 acc_original  = evaluate(train, test, pred_original, average_precision, per_node = true)
 ctr           = closed_triad_removal(train, test, budgets)
@@ -69,13 +69,33 @@ for perturbed_graph in ctr
     )
 end
 
-vals      = zeros(length(budgets),2)
-println(size(acc_perturbed_AA), " ", acc_perturbed_AA)
-vals[:,1] = acc_perturbed_AA
-vals[:,2] = acc_perturbed_katz
-p         = plot(budgets, vals, label = ["AA","katz"], title="Acc vs budgets")
-xlabel!(p,"budgets")
-ylabel!(p,"accuracy (MAP)")
-display(p)
-readline()
+println(acc_perturbed_AA)
+println(acc_perturbed_katz)
+labels=["AA","katz"]
+
+open("results.txt","w") do io
+    for v in budgets
+        write(io,string(v));
+        write(io," ");
+    end
+
+    write(io,"\n");
+    for v in labels
+        write(io,v);
+        write(io," ");
+    end
+
+    write(io,"\n");
+    for v in acc_perturbed_AA
+        write(io,string(v));
+        write(io," ");
+    end
+
+    write(io,"\n");
+    for v in acc_perturbed_katz
+        write(io,string(v));
+        write(io," ");
+    end
+end
+
 
