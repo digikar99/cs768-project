@@ -149,8 +149,9 @@ Returns a new graph, formed by randomly deleting edges from the graph
 train : graph, intended to be the training graph
 n_del : number of edges to delete
 """
-function random_del(train::SimpleGraph, n_del::Int)
+function random_del(train::SimpleGraph, budgets)
     new_g = copy(train)
+    n_del=maximum(budgets)
 
     del_vec = Set(
         Random.shuffle(
@@ -159,17 +160,29 @@ function random_del(train::SimpleGraph, n_del::Int)
     )
 
     idx = 1
-    for e in edges(new_g)
-        if idx in del_vec
-            rem_edge!(new_g, e)
+    iter=1
+    b=1
+    Channel() do channel
+
+        for e in edges(new_g)
+            if idx in del_vec
+                rem_edge!(new_g, e)
+                if iter<=length(budgets) && b==convert(Int,budgets[iter])
+                    put!(channel,SimpleGraph(new_g))
+                    iter+=1
+                end
+                b+=1
+            end
+            idx += 1
         end
-        idx += 1
     end
-    new_g
 end
 
 
+include("utils.jl")
 include("CTR.jl")
+include("OTC.jl")
+include("node_embedding_attack.jl")
 
 ExportAll.@exportAll()
 
