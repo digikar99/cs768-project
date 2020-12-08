@@ -171,8 +171,8 @@ function random_del(train::SimpleGraph, budgets)
                 u=rand(1:nv_)
             end
             flips+=1
+            rem_edge!(train,u,v)
             if flips==budgets[iter]
-                rem_edge!(train,u,v)
                 put!(channel,SimpleGraph(train))
                 iter+=1
             end
@@ -227,35 +227,39 @@ function random_flips(train::SimpleGraph,test::SimpleGraph,budgets)
     flips=0
     iter=1
     nv_=nv(train)
+    edges_added=[]
+    edges_deleted=[]
     Channel() do channel
         while true
             if flips>=maximum(budgets)
                 break
             end
             add_or_del=rand(1:2)
-            if add_or_del==1
+            if add_or_del==1 #add_edge
                 u=rand(1:nv_)
                 v=rand(1:nv_)
-                while v==u || has_edge(test,u,v) || has_edge(train,u,v)
+                while v==u || has_edge(test,u,v) || has_edge(train,u,v) || (sort!([u,v]) in edges_deleted)
                     v=rand(1:nv_)
                     u=rand(1:nv_)
                 end
                 flips+=1
+                add_edge!(train,u,v)
+                push!(edges_added,sort!([u,v]))
                 if flips==budgets[iter]
-                    add_edge!(train,u,v)
                     put!(channel,SimpleGraph(train))
                     iter+=1
                 end
-            else
+            else #delete edge
                 u=rand(1:nv_)
                 v=rand(1:nv_)
-                while v==u || !has_edge(train,u,v)
+                while v==u || !has_edge(train,u,v) || (sort!([u,v]) in edges_added)
                     v=rand(1:nv_)
                     u=rand(1:nv_)
                 end
                 flips+=1
+                rem_edge!(train,u,v)
+                push!(edges_deleted,sort!([u,v]))
                 if flips==budgets[iter]
-                    rem_edge!(train,u,v)
                     put!(channel,SimpleGraph(train))
                     iter+=1
                 end
@@ -331,7 +335,7 @@ function main()
     dim=min(32,nv(g)) 
     window_size=5
 
-    budgets=[1*(0:1)...]
+    budgets=[10*(0:5)...]
     train_fraction=0.8
     train, test = create_train_test_graph(g,train_fraction)
 
@@ -487,7 +491,7 @@ function main()
         "Random_flips"=>Random_flips,
         "NEA"=>NEA
         )
-    perturb_methods=["Katz","Random_del"]
+    perturb_methods=["CTR","Random_del"]
 
     for method in perturb_methods
         println(methods_to_methods_call[method])
