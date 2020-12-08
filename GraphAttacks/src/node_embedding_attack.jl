@@ -36,22 +36,22 @@ function node_embedding_attack(train_graph::SimpleGraph,test_graph::SimpleGraph,
     vals, vecs = eigen(Array(adj_matrix), deg_matrix)
 
     loss_for_candidates = loss_estimate(candidates, delta_w, vals, vecs, n_nodes, dim, window_size)
-        	println("here nea")
+        	# println("here nea")
     Channel() do channel
-        	println("here nea")
+        	# println("here nea")
     	sorted_candidates_idx=[sortperm(loss_for_candidates,rev=true)...]
     	for b in budgets
-        	println("here nea")
+        	# println("here nea")
  		   top_flips = candidates[sorted_candidates_idx[1:b],:]
  		   top_flips_I=[map(x->x[1],top_flips)...]
  		   top_flips_J=[map(x->x[2],top_flips)...]
-        	println("here nea")
+        	# println("here nea")
  		   flips_matrix=sparse(top_flips_I, top_flips_J,delta_w[sorted_candidates_idx[1:b]],n_nodes,n_nodes)+
 						sparse(top_flips_J, top_flips_I, delta_w[sorted_candidates_idx[1:b]],n_nodes,n_nodes)	
-        	println("here nea")
+        	# println("here nea")
  		   perturbed_matrix=adj_matrix+flips_matrix
  		   # embedding,_,_,_=deepwalk_embedding(Array(perturbed_matrix),window_size,dim)
-        	println("here nea")
+        	# println("here nea")
 
  		   put!(channel,SimpleGraph(perturbed_matrix))
  		end

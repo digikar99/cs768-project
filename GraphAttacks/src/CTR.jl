@@ -18,6 +18,11 @@ function closed_triad_removal(train_graph::SimpleGraph,
     # train_graph = copy(train_graph)
     iter=1
     Channel() do channel
+        if minimum(budgets)==0
+            put!(channel,train_graph)
+            iter+=1
+        end
+
 
         for b in 1:maximum(budgets)
 

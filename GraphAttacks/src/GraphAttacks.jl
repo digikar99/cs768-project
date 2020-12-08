@@ -155,6 +155,11 @@ function random_del(train::SimpleGraph, budgets)
     iter=1
     nv_=nv(train)
     Channel() do channel
+        if minimum(budgets)==0
+            put!(channel,train)
+            iter+=1
+        end
+
         while true
             if flips>=maximum(budgets)
                 break
@@ -189,9 +194,15 @@ using Plots
 # graph=scale_free(V,E)
 function random_add(train::SimpleGraph,test::SimpleGraph,budgets)
     flips=0
-    iter=1
+    # iter=1
     nv_=nv(train)
+    iter=1
+
     Channel() do channel
+        if minimum(budgets)==0
+            put!(channel,train)
+            iter+=1
+        end
         while true
             if flips>=maximum(budgets)
                 break
@@ -203,8 +214,8 @@ function random_add(train::SimpleGraph,test::SimpleGraph,budgets)
                 u=rand(1:nv_)
             end
             flips+=1
+            add_edge!(train,u,v)
             if flips==budgets[iter]
-                add_edge!(train,u,v)
                 put!(channel,SimpleGraph(train))
                 iter+=1
             end
@@ -320,8 +331,8 @@ function main()
     dim=min(32,nv(g)) 
     window_size=5
 
-    budgets=[10*(1:5)...]
-    train_fraction=0.6
+    budgets=[1*(0:1)...]
+    train_fraction=0.8
     train, test = create_train_test_graph(g,train_fraction)
 
     function Random_del()
@@ -331,7 +342,7 @@ function main()
         acc_perturbed_NE_sim = []
         for perturbed_graph in method_perturbed_graphs
             println(perturbed_graph)
-            # println("here!!!!!")
+            println("here!!!!!")
             pred    = predict(perturbed_graph, adamic_adar,   per_node=per_node)
             push!(acc_perturbed_AA,evaluate(perturbed_graph, test, pred, average_precision,   per_node=per_node))
             pred    = predict(perturbed_graph, katz,  per_node= per_node)
@@ -427,7 +438,7 @@ function main()
         Add(allvals,plot_labels,acc_perturbed_NE_sim,"DW_sim on OTC perturbed",">")
     end
     function Katz()
-        method_perturbed_graphs = greedy_katz(SimpleGraph(train), test, budgets)
+        method_perturbed_graphs = greedy_katz(SimpleGraph(train), test, budgets,0.001)
         acc_perturbed_AA   = []
         acc_perturbed_katz = []
         acc_perturbed_NE_sim = []
@@ -470,12 +481,13 @@ function main()
     methods_to_methods_call=Dict(
         "CTR"=>CTR,
         "OTC"=>OTC,
+        "Katz"=>Katz,
         "Random_del"=>Random_del,
         "Random_add"=>Random_add,
         "Random_flips"=>Random_flips,
         "NEA"=>NEA
         )
-    perturb_methods=["OTC","Random_add"]
+    perturb_methods=["Katz","Random_del"]
 
     for method in perturb_methods
         println(methods_to_methods_call[method])

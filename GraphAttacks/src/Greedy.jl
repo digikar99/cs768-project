@@ -1,4 +1,4 @@
-function greedy_katz(graph::SimpleGraph, target::SimpleGraph, budget::Int,
+function greedy_katz(graph::SimpleGraph, target::SimpleGraph, budgets,
                      katz_beta::AbstractFloat)
     # Incomplete
     # Delete those edges that result in maximum decrease of the Katz score of the target links
@@ -21,35 +21,50 @@ function greedy_katz(graph::SimpleGraph, target::SimpleGraph, budget::Int,
     opt_g       = copy(graph)
     opt_adj_mat = copy(base_adj_mat)
 
-    for b = 1:budget
-        num_edges_tried = 0
-        new_opt_g       = opt_g
-        new_opt_adj_mat = opt_adj_mat
-        opt_u = nothing
-        opt_v = nothing
-        for e in edges(opt_g)
-            num_edges_tried += 1
-            if num_edges_tried % 100 == 0 println(num_edges_tried) end
-            temp = copy(opt_g)
-            rem_edge!(temp, e)
-            new_opt_adj_mat[src(e), dst(e)] = 0
-            new_opt_adj_mat[dst(e), src(e)] = 0
-            katz_score = target_sum_scorer(new_opt_adj_mat)
-            diff       = base_katz_score - katz_score
-            if diff > best_diff
-                best_diff = diff
-                new_opt_g = temp
-                opt_u     = src(e)
-                opt_v     = dst(e)
-            end
-            new_opt_adj_mat[src(e), dst(e)] = 1
-            new_opt_adj_mat[dst(e), src(e)] = 1
+    iter=1
+    Channel() do channel
+        if minimum(budgets)==0
+            put!(channel,graph)
+            iter+=1
         end
-        opt_g = new_opt_g
-        new_opt_adj_mat[opt_u, opt_v] = 0
-        new_opt_adj_mat[opt_v, opt_u] = 0
+
+
+        for b  in 1:maximum(budgets)
+            num_edges_tried = 0
+            new_opt_g       = opt_g
+            new_opt_adj_mat = opt_adj_mat
+            opt_u = nothing
+            opt_v = nothing
+            for e in edges(opt_g)
+                num_edges_tried += 1
+                if num_edges_tried % 100 == 0 println(num_edges_tried) end
+                temp = copy(opt_g)
+                rem_edge!(temp, e)
+                new_opt_adj_mat[src(e), dst(e)] = 0
+                new_opt_adj_mat[dst(e), src(e)] = 0
+                katz_score = target_sum_scorer(new_opt_adj_mat)
+                diff       = base_katz_score - katz_score
+                if diff > best_diff
+                    best_diff = diff
+                    new_opt_g = temp
+                    opt_u     = src(e)
+                    opt_v     = dst(e)
+                end
+                new_opt_adj_mat[src(e), dst(e)] = 1
+                new_opt_adj_mat[dst(e), src(e)] = 1
+            end
+            opt_g = new_opt_g
+            new_opt_adj_mat[opt_u, opt_v] = 0
+            new_opt_adj_mat[opt_v, opt_u] = 0
+            if iter<=length(budgets) && b==convert(Int,budgets[iter])
+                put!(channel,SimpleGraph(opt_g))
+                iter+=1
+            end
+
+        end
     end
-    opt_g
+    # opt_g
+
 end
 
 function greedy_cnd(graph::SimpleGraph, target::SimpleGraph, budget::Int)
