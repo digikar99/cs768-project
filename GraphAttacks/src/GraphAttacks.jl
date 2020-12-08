@@ -346,12 +346,12 @@ function main()
     end
 
     function Random_add()
-            println(" random add here!!!!!")
+            # println(" random add here!!!!!")
         method_perturbed_graphs = random_add(SimpleGraph(train), test,budgets)
         acc_perturbed_AA   = []
         acc_perturbed_katz = []
         acc_perturbed_NE_sim = []
-            println(method_perturbed_graphs)
+            # println(method_perturbed_graphs)
 
         for perturbed_graph in method_perturbed_graphs
             # println("here!!!!!")
@@ -475,7 +475,7 @@ function main()
         "Random_flips"=>Random_flips,
         "NEA"=>NEA
         )
-    perturb_methods=["NEA","Random_del"]
+    perturb_methods=["OTC","Random_add"]
 
     for method in perturb_methods
         println(methods_to_methods_call[method])

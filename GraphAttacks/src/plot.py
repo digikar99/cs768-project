@@ -16,6 +16,7 @@ file=sys.argv[1]
 budgets=[]
 values=[]
 # values_names=[]
+collected_dict={}
 with open(av.file,"r") as rfile:
 	budgets=list(map(int,rfile.readline().strip().split(",")))
 	plot_labels=str(rfile.readline().strip()).split(",")

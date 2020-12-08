@@ -4,7 +4,7 @@ using LightGraphs
 # include("utils.jl")
 
 
-function open_triad_creation(train_graph::SimpleGraph,test_graph::SimpleGraph, budget)
+function open_triad_creation(train_graph::SimpleGraph,test_graph::SimpleGraph, budgets)
     # train_graph = copy(train_graph)
     iter=1
     function candidate_non_edges()
@@ -12,8 +12,7 @@ function open_triad_creation(train_graph::SimpleGraph,test_graph::SimpleGraph, b
         # Channel() do channel
             for u in 1:nv(train_graph)
                 for v in u:nv(train_graph)
-                    if !has_edge(train_graph,u,v) && !has_edge(test_graph,u,v) && (degree(test_graph,u)>0 ||
-                        degree(test_graph,v)>0)
+                    if !has_edge(train_graph,u,v) && !has_edge(test_graph,u,v) 
                         block=0
                         for w in neighbors(test_graph,v)
                             if has_edge(train_graph,u,w)
@@ -53,6 +52,7 @@ function open_triad_creation(train_graph::SimpleGraph,test_graph::SimpleGraph, b
                 end
                 d
             end
+            # println("here")
 
             non_edge_with_max_score = 
                 begin
@@ -66,6 +66,7 @@ function open_triad_creation(train_graph::SimpleGraph,test_graph::SimpleGraph, b
                                 break
                             end
                         end
+            # println("here")
                         if block==0
                             for w in neighbors(test_graph,u)
                                 if has_edge(train_graph,v,w)
@@ -74,25 +75,29 @@ function open_triad_creation(train_graph::SimpleGraph,test_graph::SimpleGraph, b
                                 end
                             end
                         end
+            # println("here")
                         if block==1
                             deleteat!(candidate_non_edges_list, findall(y->y==(u,v),candidate_non_edges_list))
+                            # delete!(scores, [u,v])
                         else
                             nu=neighbors(train_graph, u)
                             nv=neighbors(train_graph, v)
                             scores[sort!([u,v])]=length(setdiff(union(nu,nv), intersect(nu,nv)))                    
                         end
                     end
+            # println("here",u,v)
                     if length(candidate_non_edges_list)>0
-                        argmaximum(e->scores[e], candidate_non_edges_list)
+                        argmaximum(e->scores[[e[1],e[2]]], candidate_non_edges_list)
                     else
                         nothing
                     end
                 end
-            if edge_with_max_score==nothing
+            # println("chifnsfekjdsn")
+            if non_edge_with_max_score==nothing
                 error("Run out of good candidate non edges")
             end
 
-            u, v = edge_with_max_score
+            u, v = non_edge_with_max_score
             add_edge!(train_graph, u, v)
             if iter<=length(budgets) && b==convert(Int,budgets[iter])
                 put!(channel,SimpleGraph(train_graph))
