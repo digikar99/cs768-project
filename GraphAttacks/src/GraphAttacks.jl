@@ -230,6 +230,11 @@ function random_flips(train::SimpleGraph,test::SimpleGraph,budgets)
     edges_added=[]
     edges_deleted=[]
     Channel() do channel
+        if minimum(budgets)==0
+            put!(channel,train)
+            iter+=1
+        end
+
         while true
             if flips>=maximum(budgets)
                 break
@@ -333,7 +338,7 @@ function main()
             end
     end
     dim=min(32,nv(g)) 
-    window_size=5
+    window_size=10
 
     budgets=[10*(0:5)...]
     train_fraction=0.8
@@ -460,7 +465,7 @@ function main()
         Add(allvals,plot_labels,acc_perturbed_NE_sim,"DW_sim Katz-greedy perturbed",">")
     end
     function NEA()
-        method_perturbed_graphs = node_embedding_attack(SimpleGraph(train), test, budgets,dim)
+        method_perturbed_graphs = node_embedding_attack(SimpleGraph(train), test, budgets,dim,window_size)
         acc_perturbed_AA   = []
         acc_perturbed_katz = []
         acc_perturbed_NE_sim = []
@@ -499,10 +504,13 @@ function main()
     end
     println(allvals)
     println(plot_labels)
+    title="$dataset$(nv(train))-$(ne(train))-$(ne(test)) MAP vs #flips"
 
 
-    out_file="$(dataset)_$(join(perturb_methods,"_"))_all.txt"
+    out_file="$(dataset)_$(join(perturb_methods,"_"))_all"
     open(out_file,"w") do io
+        write(io,title);
+        write(io,"\n");
         write(io,join(map(x->string(x),budgets),","));
 
         write(io,"\n");

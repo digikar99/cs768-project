@@ -5,7 +5,7 @@ import argparse
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--file', default=False)
-parser.add_argument('--title', default="MAP vs #flips")
+# parser.add_argument('--title', default="MAP vs #flips")
 parser.add_argument('--xlabel', default="#flips")
 parser.add_argument('--ylabel', default="MAP")
 
@@ -18,6 +18,7 @@ values=[]
 # values_names=[]
 collected_dict={}
 with open(av.file,"r") as rfile:
+	title=rfile.readline().strip()
 	budgets=list(map(int,rfile.readline().strip().split(",")))
 	plot_labels=str(rfile.readline().strip()).split(",")
 	markers=str(rfile.readline().strip()).split(" ")
@@ -28,13 +29,14 @@ print(budgets)
 # plot_labels
 for i in range(len(values)):
 	plt.plot(budgets,values[i],label=plot_labels[i],marker=markers[i])
-title=av.title
+# title=av.title
 xlabel=av.xlabel
 ylabel=av.ylabel
 plt.title(title)
 plt.xlabel(xlabel)
 plt.ylabel(ylabel)
 plt.legend()
-plt.show()
+# plt.show()
+plt.savefig(av.file+".png")
 
 

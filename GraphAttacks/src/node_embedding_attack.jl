@@ -88,7 +88,7 @@ function deepwalk_embedding(adj_matrix, window_size::Int, embedding_dim::Int, nu
 
     deg = [sum(adj_matrix,dims=1)...]
     deg[deg .== 0] .= 1
-    inv_deg_matrix = Diagonal(1 ./ deg)
+    inv_deg_matrix = Array(Diagonal(1 ./ deg))
 
     volume = sum(adj_matrix)
 
@@ -141,13 +141,14 @@ end
 
 function sum_power_transition(adj_matrix, pow)
 
-    deg = sum(adj_matrix,dims=2) #tested
-    deg=map(x->max(1,x),deg)#chitr
-    transition_matrix = Diagonal(1 ./ deg) * adj_matrix
+    deg = [sum(adj_matrix,dims=1)...]
+    deg[deg .== 0] .= 1
+    inv_deg_matrix = Array(Diagonal(1 ./ deg))
+    transition_matrix = inv_deg_matrix * adj_matrix
 
     sum_of_powers = transition_matrix
     last_ = transition_matrix
-    for i in 1:pow
+    for i in 1:pow-1
         last_ = last_*transition_matrix
         sum_of_powers += last_
     end
