@@ -136,6 +136,7 @@ function main()
 		acc_perturbed_katz = []
 		acc_perturbed_NE_sim = []
 		for perturbed_graph in method_perturbed_graphs
+			println("here!!!!!")
 			pred    = predict(perturbed_graph, adamic_adar,   per_node=per_node)
 			push!(acc_perturbed_AA,evaluate(perturbed_graph, test, pred, average_precision,   per_node=per_node))
 			pred    = predict(perturbed_graph, katz,  per_node= per_node)
@@ -155,6 +156,7 @@ function main()
 		acc_perturbed_katz = []
 		acc_perturbed_NE_sim = []
 		for perturbed_graph in method_perturbed_graphs
+			println("here!!!!!")
 			pred    = predict(perturbed_graph, adamic_adar,   per_node=per_node)
 			push!(acc_perturbed_AA,evaluate(perturbed_graph, test, pred, average_precision,   per_node=per_node))
 			pred    = predict(perturbed_graph, katz,  per_node= per_node)
@@ -267,8 +269,10 @@ function main()
 		"Random_flips"=>Random_flips,
 		"NEA"=>NEA
 		)
-	perturb_methods=["CTR","Random_del"]
+	perturb_methods=["CTR","Random_add"]
+
 	for method in perturb_methods
+		println(methods_to_methods_call[method])
 		methods_to_methods_call[method]()
 	end
 	println(allvals)
@@ -277,23 +281,14 @@ function main()
 
 	out_file="$(dataset)_$(join(perturb_methods,"_"))_all.txt"
 	open(out_file,"w") do io
-		for v in budgets
-			write(io,string(v));
-			write(io," ");
-		end
+		write(io,join(map(x->string(x),budgets),","));
 
 		write(io,"\n");
-		for v in plot_labels
-			write(io,v);
-			write(io," ");
-		end
+		write(io,join(map(x->string(x),plot_labels),","));
 
 		for i in 1:length(plot_labels)
 			write(io,"\n");
-			for v in allvals[i]
-				write(io,string(v));
-				write(io," ");
-			end
+			write(io,join(map(x->string(x),allvals[i]),","));
 		end
 
 	end
@@ -307,4 +302,4 @@ function main()
 	# display(p)
 end
 
-main()
+# main()
