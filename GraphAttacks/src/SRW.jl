@@ -11,21 +11,21 @@ using Random
 MAX_ITERATIONS = 10000
 
 function principle_eigenvector(matrix, eps=1e-6)
-    # eigen(matrix).vectors[:, end]
+    eigen(transpose(matrix)).vectors[:, end]
     # Power iteration to find principle eigenvector:
     # https://en.wikipedia.org/wiki/Power_iteration
-    prev = rand(size(matrix,1))
-    next = rand(size(matrix,1))
-    iter = 0
-    # matrixT = transpose(matrix)
-    while maximum(abs.(next-prev))>eps && iter < MAX_ITERATIONS
-        prev .= next
-        next = matrix * prev
-        next ./= norm(next)
-        iter += 1
-        # println(prev, " ", next, " ", maximum(abs.(next-prev)))
-    end
-    return next
+    # prev = rand(size(matrix,1))
+    # next = rand(size(matrix,1))
+    # iter = 0
+    # # matrixT = transpose(matrix)
+    # while maximum(abs.(next-prev))>eps && iter < MAX_ITERATIONS
+    #     prev .= next
+    #     next = matrix * prev
+    #     next ./= norm(next)
+    #     iter += 1
+    #     # println(prev, " ", next, " ", maximum(abs.(next-prev)))
+    # end
+    # return next
 end
 
 # ------------------------------------------------------------------------------
@@ -59,7 +59,8 @@ mutable struct SupervisedRandomWalker
 end
 
 function make_SRW(graph, node_features;
-                  restart_probability=0.1, weights=nothing)
+                  restart_probability=0.1, weights=nothing, seed=0)
+    Random.seed!(seed)
     node_features = node_features[1:nv(graph), :]
     num_nodes, num_features = size(node_features)
     # TODO: Handle the case wherein edge_strength_function is not a dot product
@@ -174,8 +175,9 @@ Returns two values: unregularized loss, regularized loss
 """
 
 # TODO: Incorporate lambda
-function loss(srw::SupervisedRandomWalker,
-              loss_fn::Function = hinge_loss)
+function loss(srw::SupervisedRandomWalker;
+              loss_fn::Function = hinge_loss,
+              lambda=1)
 
     graph             = srw.graph
     stationary_scores = srw.stationary_scores
@@ -194,7 +196,7 @@ function loss(srw::SupervisedRandomWalker,
         end
     end
 
-    return total_loss, total_loss + norm(srw.weights, 2)
+    return total_loss, lambda*total_loss + norm(srw.weights, 2)
 end
 
 # ------------------------------------------------------------------------------

@@ -28,7 +28,7 @@ function create_simple_graph(filename="/home/shubhamkar/ram-disk/datasets/FBK_fu
     end
 end
 
-function create_train_test_graph(graph::SimpleGraph,
+function create_train_test_graph(graph::AbstractGraph,
                                  train_fraction::AbstractFloat = 0.8,
                                  seed::Int = 0)
     train = SimpleGraph(nv(graph))
@@ -55,7 +55,7 @@ end
 Expects that sorted_v is a list of vertices corresponding to a pre-computed ranked_list
 Intended to be used by evaluate
 """
-function average_precision(test_graph::SimpleGraph,
+function average_precision(test_graph::AbstractGraph,
                            ranked_list::Vector)
     num_edges_so_far = 0
     precision_sum    = 0.0
@@ -67,6 +67,7 @@ function average_precision(test_graph::SimpleGraph,
             precision_sum += num_edges_so_far/num_pairs_so_far
         end
     end
+    # println(num_edges_so_far)
     if num_edges_so_far == 0
         nothing
     else
@@ -78,8 +79,9 @@ include("Heuristics.jl")
 include("CiteSeer.jl")
 include("SRW.jl")
 
-function predict(train_graph::SimpleGraph, scorer::Function;
-                 per_node::Bool=PER_NODE, beta::AbstractFloat=0.001)
+function predict(train_graph::AbstractGraph, scorer::Function;
+                 per_node::Bool=PER_NODE, beta::AbstractFloat=0.001,
+                 include_train_edges = false)
 
     g = train_graph
 
@@ -89,18 +91,30 @@ function predict(train_graph::SimpleGraph, scorer::Function;
     else
         scorer(train_graph)
     end
-    
+
     if per_node
         predictions = Dict()
         # should "export JULIA_NUM_THREADS=n" in .bashrc to take advantage
         # TODO: If needed, speed it up using type declarations?
         for u in 1:nv(train_graph)
-            predictions[u] = [
-                (u, v, score_matrix[u,v]) for v in 1:nv(train_graph)
-                if !has_edge(train_graph, u, v)
-            ]
-            sort!(predictions[u], by = x -> x[3], rev = true)
-            # if u%100 == 0 println("Processed $u nodes") end
+            predictions[u] = []
+            for v in 1:nv(train_graph)
+                if include_train_edges
+                    if u == v
+                        continue
+                    else
+                        push!(predictions[u], (u, v, score_matrix[u,v]))
+                    end
+                else
+                    if u == v || has_edge(train_graph, u, v)
+                        continue
+                    else
+                        push!(predictions[u], (u, v, score_matrix[u,v]))
+                    end
+                end
+                sort!(predictions[u], by = x -> x[3], rev = true)
+                # if u%100 == 0 println("Processed $u nodes") end
+            end
         end
     else
         predictions=[]
@@ -121,8 +135,8 @@ predictions -> a Dict mapping each node to the ranked_list with
 metric      -> a function that takes test_graph and a ranked_list as input
                and returns a score
 """
-function evaluate(train_graph::SimpleGraph,
-                  test_graph::SimpleGraph,
+function evaluate(train_graph::AbstractGraph,
+                  test_graph::AbstractGraph,
                   predictions,
                   metric::Function;
                   per_node::Bool=PER_NODE)
