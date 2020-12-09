@@ -16,16 +16,18 @@ file=sys.argv[1]
 budgets=[]
 values=[]
 # values_names=[]
+collected_dict={}
 with open(av.file,"r") as rfile:
-	budgets=list(map(int,rfile.readline().strip().split(" ")))
-	plot_labels=str(rfile.readline().strip()).split(" ")
+	budgets=list(map(int,rfile.readline().strip().split(",")))
+	plot_labels=str(rfile.readline().strip()).split(",")
+	markers=str(rfile.readline().strip()).split(" ")
 	for _ in range(len(plot_labels)):
-		values.append(list(map(float,rfile.readline().strip().split(" "))))
+		values.append(list(map(float,rfile.readline().strip().split(","))))
 
 print(budgets)
 # plot_labels
 for i in range(len(values)):
-	plt.plot(budgets,values[i],label=plot_labels[i])
+	plt.plot(budgets,values[i],label=plot_labels[i],marker=markers[i])
 title=av.title
 xlabel=av.xlabel
 ylabel=av.ylabel

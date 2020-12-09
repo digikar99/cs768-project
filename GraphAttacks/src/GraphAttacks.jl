@@ -163,28 +163,366 @@ Returns a new graph, formed by randomly deleting edges from the graph
 train : graph, intended to be the training graph
 n_del : number of edges to delete
 """
-function random_del(train::SimpleGraph, n_del::Int)
-    new_g = copy(train)
-
-    del_vec = Set(
-        Random.shuffle(
-            collect(1:ne(train))
-        )[1:n_del]
-    )
-
-    idx = 1
-    for e in edges(new_g)
-        if idx in del_vec
-            rem_edge!(new_g, e)
+function random_del(train::SimpleGraph, budgets)
+    # new_g = copy(train)
+    flips=0
+    iter=1
+    nv_=nv(train)
+    Channel() do channel
+        while true
+            if flips>=maximum(budgets)
+                break
+            end
+            u=rand(1:nv_)
+            v=rand(1:nv_)
+            while v==u || !has_edge(train,u,v)
+                v=rand(1:nv_)
+                u=rand(1:nv_)
+            end
+            flips+=1
+            if flips==budgets[iter]
+                rem_edge!(train,u,v)
+                put!(channel,SimpleGraph(train))
+                iter+=1
+            end
         end
-        idx += 1
     end
-    new_g
 end
 
 
+include("utils.jl")
 include("CTR.jl")
+include("OTC.jl")
+include("node_embedding_attack.jl")
+# using GraphAttacks
+using Plots
+# using LightGraphs
+# can you check this? sclae free formulation seemsto be depcreceated
+# V=100
+# E=200
+# graph=scale_free(V,E)
+function random_add(train::SimpleGraph,test::SimpleGraph,budgets)
+    flips=0
+    iter=1
+    nv_=nv(train)
+    Channel() do channel
+        while true
+            if flips>=maximum(budgets)
+                break
+            end
+            u=rand(1:nv_)
+            v=rand(1:nv_)
+            while v==u || has_edge(test,u,v) || has_edge(train,u,v)
+                v=rand(1:nv_)
+                u=rand(1:nv_)
+            end
+            flips+=1
+            if flips==budgets[iter]
+                add_edge!(train,u,v)
+                put!(channel,SimpleGraph(train))
+                iter+=1
+            end
+        end
+    end
+end
 
+function random_flips(train::SimpleGraph,test::SimpleGraph,budgets)
+    flips=0
+    iter=1
+    nv_=nv(train)
+    Channel() do channel
+        while true
+            if flips>=maximum(budgets)
+                break
+            end
+            add_or_del=rand(1:2)
+            if add_or_del==1
+                u=rand(1:nv_)
+                v=rand(1:nv_)
+                while v==u || has_edge(test,u,v) || has_edge(train,u,v)
+                    v=rand(1:nv_)
+                    u=rand(1:nv_)
+                end
+                flips+=1
+                if flips==budgets[iter]
+                    add_edge!(train,u,v)
+                    put!(channel,SimpleGraph(train))
+                    iter+=1
+                end
+            else
+                u=rand(1:nv_)
+                v=rand(1:nv_)
+                while v==u || !has_edge(train,u,v)
+                    v=rand(1:nv_)
+                    u=rand(1:nv_)
+                end
+                flips+=1
+                if flips==budgets[iter]
+                    rem_edge!(train,u,v)
+                    put!(channel,SimpleGraph(train))
+                    iter+=1
+                end
+            end
+        end
+    end
+end
+
+
+
+function cosine_sim(embeddings,dim_axis=2)
+    norm_embeddings=embeddings./sqrt.(sum((embeddings.*embeddings),dims=dim_axis))
+    norm_embeddings*transpose(norm_embeddings)
+end
+function predict_using_embeddings(train_graph::SimpleGraph,embeddings,
+                 per_node::Bool=false)
+
+    g = train_graph
+
+    predictions  = nothing
+    score_matrix = cosine_sim(embeddings)
+    
+    if per_node
+        predictions = Dict()
+        # should "export JULIA_NUM_THREADS=n" in .bashrc to take advantage
+        # TODO: If needed, speed it up using type declarations?
+        for u in 1:nv(train_graph)
+            predictions[u] = [
+                (u, v, score_matrix[u,v]) for v in 1:nv(train_graph)
+                if !has_edge(train_graph, u, v)
+            ]
+            sort!(predictions[u], by = x -> x[3], rev = true)
+            # if u%100 == 0 println("Processed $u nodes") end
+        end
+    else
+        predictions=[]
+        for u in 1:nv(train_graph)
+            append!(predictions,[
+                (u, v, score_matrix[u,v]) for v in u+1:nv(train_graph)
+                if !has_edge(train_graph, u, v)
+            ])
+        end
+        sort!(predictions, by = x -> x[3], rev = true)
+    end
+    predictions
+end
+
+# g           = create_simple_graph("/home/shubhamkar/ram-disk/datasets/GRQ_test_0.net")
+function main()
+    # dataset="GRQ"
+    dataset="scale_free"
+    # method="OTC"
+    allvals=[]
+    plot_labels=[]
+    markers=[]
+    per_node=true
+
+    function Add(values_,plot_labels,value,plot_label,marker)
+        if length(value)>0
+            push!(values_,value)
+            push!(plot_labels,plot_label)
+            push!(markers,marker)
+        end
+        return nothing
+    end
+    g= begin
+            if dataset=="scale_free"
+                static_scale_free(100,1000,2)
+            else
+                create_simple_graph("//home/chitrank/cs768_datasets/datasets/GRQ_test_0.net")
+            end
+    end
+    dim=min(32,nv(g)) 
+    window_size=5
+
+    budgets=[10*(1:5)...]
+    train_fraction=0.6
+    train, test = create_train_test_graph(g,train_fraction)
+
+    function Random_del()
+        method_perturbed_graphs = random_del(SimpleGraph(train), budgets)
+        acc_perturbed_AA   = []
+        acc_perturbed_katz = []
+        acc_perturbed_NE_sim = []
+        for perturbed_graph in method_perturbed_graphs
+            println(perturbed_graph)
+            # println("here!!!!!")
+            pred    = predict(perturbed_graph, adamic_adar,   per_node=per_node)
+            push!(acc_perturbed_AA,evaluate(perturbed_graph, test, pred, average_precision,   per_node=per_node))
+            pred    = predict(perturbed_graph, katz,  per_node= per_node)
+            push!(acc_perturbed_katz,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+            embeddings,_,_,_= deepwalk_embedding(Array(adjacency_matrix(perturbed_graph)),window_size,dim)
+            pred    = predict_using_embeddings(perturbed_graph, embeddings,   per_node)
+            push!(acc_perturbed_NE_sim,evaluate(perturbed_graph, test, pred, average_precision,   per_node=per_node))
+        end
+        Add(allvals,plot_labels,acc_perturbed_AA,"AA on random-del-perturbed","o")
+        Add(allvals,plot_labels,acc_perturbed_katz,"Katz on random-del-perturbed","v")
+        Add(allvals,plot_labels,acc_perturbed_NE_sim,"DW_sim on random-del-perturbed",">")
+    end
+
+    function Random_add()
+            # println(" random add here!!!!!")
+        method_perturbed_graphs = random_add(SimpleGraph(train), test,budgets)
+        acc_perturbed_AA   = []
+        acc_perturbed_katz = []
+        acc_perturbed_NE_sim = []
+            # println(method_perturbed_graphs)
+
+        for perturbed_graph in method_perturbed_graphs
+            # println("here!!!!!")
+            # println()
+            println(perturbed_graph)
+            # println()
+            pred    = predict(perturbed_graph, adamic_adar,   per_node=per_node)
+            push!(acc_perturbed_AA,evaluate(perturbed_graph, test, pred, average_precision,   per_node=per_node))
+            pred    = predict(perturbed_graph, katz,  per_node= per_node)
+            push!(acc_perturbed_katz,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+            embeddings,_,_,_= deepwalk_embedding(Array(adjacency_matrix(perturbed_graph)),window_size,dim)
+            pred    = predict_using_embeddings(perturbed_graph, embeddings,   per_node)
+            push!(acc_perturbed_NE_sim,evaluate(perturbed_graph, test, pred, average_precision,   per_node=per_node))
+        end
+        Add(allvals,plot_labels,acc_perturbed_AA,"AA on random-add-perturbed","o")
+        Add(allvals,plot_labels,acc_perturbed_katz,"Katz on random-add-perturbed","v")
+        Add(allvals,plot_labels,acc_perturbed_NE_sim,"DW_sim on random-add-perturbed",">")
+    end
+
+    function Random_flips()
+        method_perturbed_graphs = random_flips(SimpleGraph(train), test,budgets)
+        acc_perturbed_AA   = []
+        acc_perturbed_katz = []
+        acc_perturbed_NE_sim = []
+        for perturbed_graph in method_perturbed_graphs
+            pred    = predict(perturbed_graph, adamic_adar,   per_node=per_node)
+            push!(acc_perturbed_AA,evaluate(perturbed_graph, test, pred, average_precision,   per_node=per_node))
+            pred    = predict(perturbed_graph, katz,  per_node= per_node)
+            push!(acc_perturbed_katz,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+            embeddings,_,_,_= deepwalk_embedding(Array(adjacency_matrix(perturbed_graph)),window_size,dim)
+            pred    = predict_using_embeddings(perturbed_graph, embeddings,   per_node)
+            push!(acc_perturbed_NE_sim,evaluate(perturbed_graph, test, pred, average_precision,   per_node=per_node))
+        end
+        Add(allvals,plot_labels,acc_perturbed_AA,"AA on random-flips-perturbed","o")
+        Add(allvals,plot_labels,acc_perturbed_katz,"Katz on random-flips-perturbed","v")
+        Add(allvals,plot_labels,acc_perturbed_NE_sim,"DW_sim on random-flips-perturbed",">")
+    end
+
+    function CTR()
+        method_perturbed_graphs = closed_triad_removal(SimpleGraph(train), test, budgets)
+        acc_perturbed_AA   = []
+        acc_perturbed_katz = []
+        acc_perturbed_NE_sim = []
+        for perturbed_graph in method_perturbed_graphs
+            pred    = predict(perturbed_graph, adamic_adar, per_node=per_node)
+            push!(acc_perturbed_AA,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+            pred    = predict(perturbed_graph, katz,  per_node= per_node)
+            push!(acc_perturbed_katz,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+            embeddings,_,_,_= deepwalk_embedding(Array(adjacency_matrix(perturbed_graph)),window_size,dim)
+            pred    = predict_using_embeddings(perturbed_graph, embeddings,  per_node)
+            push!(acc_perturbed_NE_sim,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+        end
+        Add(allvals,plot_labels,acc_perturbed_AA,"AA on CTR-perturbed","o")
+        Add(allvals,plot_labels,acc_perturbed_katz,"Katz on CTR-perturbed","v")
+        Add(allvals,plot_labels,acc_perturbed_NE_sim,"DW_sim on CTR-perturbed",">")
+    end
+    function OTC()
+        method_perturbed_graphs = open_triad_creation(SimpleGraph(train), test, budgets)
+        acc_perturbed_AA   = []
+        acc_perturbed_katz = []
+        acc_perturbed_NE_sim = []
+        for perturbed_graph in method_perturbed_graphs
+            pred    = predict(perturbed_graph, adamic_adar, per_node=per_node)
+            push!(acc_perturbed_AA,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+            pred    = predict(perturbed_graph, katz,  per_node= per_node)
+            push!(acc_perturbed_katz,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+            embeddings,_,_,_= deepwalk_embedding(Array(adjacency_matrix(perturbed_graph)),window_size,dim)
+            pred    = predict_using_embeddings(perturbed_graph, embeddings,  per_node)
+            push!(acc_perturbed_NE_sim,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+        end
+        Add(allvals,plot_labels,acc_perturbed_AA,"AA on OTC_perturbed","o")
+        Add(allvals,plot_labels,acc_perturbed_katz,"Katz on OTC perturbed","v")
+        Add(allvals,plot_labels,acc_perturbed_NE_sim,"DW_sim on OTC perturbed",">")
+    end
+    function Katz()
+        method_perturbed_graphs = greedy_katz(SimpleGraph(train), test, budgets)
+        acc_perturbed_AA   = []
+        acc_perturbed_katz = []
+        acc_perturbed_NE_sim = []
+        for perturbed_graph in method_perturbed_graphs
+            pred    = predict(perturbed_graph, adamic_adar, per_node=per_node)
+            push!(acc_perturbed_AA,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+            pred    = predict(perturbed_graph, katz,  per_node= per_node)
+            push!(acc_perturbed_katz,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+            embeddings,_,_,_= deepwalk_embedding(Array(adjacency_matrix(perturbed_graph)),window_size,dim)
+            pred    = predict_using_embeddings(perturbed_graph, embeddings,  per_node)
+            push!(acc_perturbed_NE_sim,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+        end
+        Add(allvals,plot_labels,acc_perturbed_AA,"AA on Katz-greedy_perturbed","o")
+        Add(allvals,plot_labels,acc_perturbed_katz,"Katz on Katz-greey perturbed","v")
+        Add(allvals,plot_labels,acc_perturbed_NE_sim,"DW_sim Katz-greedy perturbed",">")
+    end
+    function NEA()
+        method_perturbed_graphs = node_embedding_attack(SimpleGraph(train), test, budgets,dim)
+        acc_perturbed_AA   = []
+        acc_perturbed_katz = []
+        acc_perturbed_NE_sim = []
+        # println("here")
+        println(method_perturbed_graphs)
+
+        for perturbed_graph in method_perturbed_graphs
+            # println("here")
+            pred    = predict(perturbed_graph, adamic_adar, per_node=per_node)
+            push!(acc_perturbed_AA,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+            pred    = predict(perturbed_graph, katz,  per_node= per_node)
+            push!(acc_perturbed_katz,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+            embeddings,_,_,_=deepwalk_embedding(Array(adjacency_matrix(perturbed_graph)),window_size,dim)
+            pred    = predict_using_embeddings(perturbed_graph, embeddings,  per_node)
+            push!(acc_perturbed_NE_sim,evaluate(perturbed_graph, test, pred, average_precision,  per_node= per_node))
+        end
+        # println("here")
+        Add(allvals,plot_labels,acc_perturbed_AA,"AA on NEA-perturbed","o")
+        Add(allvals,plot_labels,acc_perturbed_katz,"Katz on NEA-perturbed","v")
+        Add(allvals,plot_labels,acc_perturbed_NE_sim,"DW_sim on NEA-perturbed",">")
+    end
+    methods_to_methods_call=Dict(
+        "CTR"=>CTR,
+        "OTC"=>OTC,
+        "Random_del"=>Random_del,
+        "Random_add"=>Random_add,
+        "Random_flips"=>Random_flips,
+        "NEA"=>NEA
+        )
+    perturb_methods=["OTC","Random_add"]
+
+    for method in perturb_methods
+        println(methods_to_methods_call[method])
+        methods_to_methods_call[method]()
+    end
+    println(allvals)
+    println(plot_labels)
+
+
+    out_file="$(dataset)_$(join(perturb_methods,"_"))_all.txt"
+    open(out_file,"w") do io
+        write(io,join(map(x->string(x),budgets),","));
+
+        write(io,"\n");
+        write(io,join(map(x->string(x),plot_labels),","));
+        write(io,"\n");
+        write(io,join(map(x->string(x),markers)," "));
+
+        for i in 1:length(plot_labels)
+            write(io,"\n");
+            write(io,join(map(x->string(x),allvals[i]),","));
+        end
+
+    end
+
+    # vals=zeros(length(budgets),2)
+    # vals[:,1]=acc_perturbed_AA
+    # vals[:,2]=acc_perturbed_katz
+    # p=plot(budgets,vals,label=["AA","katz"],title="Acc vs budgets")
+    # xlabel!(p,"budgets")
+    # ylabel!(p,"accuracy (MAP)")
+    # display(p)
+end
 ExportAll.@exportAll()
 
 # Example Usage:

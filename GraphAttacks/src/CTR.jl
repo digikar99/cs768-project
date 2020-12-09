@@ -1,19 +1,7 @@
 # This file is a part of GraphAttacks.jl
 
 using LightGraphs
-
-function argmaximum(f::Function, it)
-    max_so_far = typemin(Float64)
-    arg        = nothing
-    for i in it
-        score = f(i)
-        if score > max_so_far
-            max_so_far = score
-            arg        = i
-        end
-    end
-    arg
-end
+# include("utils.jl")
 
 function closed_triad_removal(train_graph::SimpleGraph,
                               test_graph::SimpleGraph,
@@ -27,7 +15,7 @@ function closed_triad_removal(train_graph::SimpleGraph,
     #     s
     # end
 
-    train_graph = copy(train_graph)
+    # train_graph = copy(train_graph)
     iter=1
     Channel() do channel
 
