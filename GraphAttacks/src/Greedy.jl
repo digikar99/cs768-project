@@ -1,22 +1,22 @@
+
+function katz_sum_scorer(target::AbstractGraph, adj_mat::Matrix, beta)
+    total = 0.0
+    for e in edges(target)
+        u = src(e)
+        v = dst(e)
+        # total += score_matrix[u,v]
+        total += katz(adj_mat, beta, u, v)
+    end
+    total
+end
+
 function greedy_katz(graph::SimpleGraph, target::SimpleGraph, budgets,
                      katz_beta::AbstractFloat)
-    # Incomplete
     # Delete those edges that result in maximum decrease of the Katz score of the target links
     # base_katz_mat = katz(graph, katz_beta)
     base_adj_mat = float(Matrix(LightGraphs.LinAlg.adjacency_matrix(graph)))
 
-    function target_sum_scorer(adj_mat::Matrix)
-        total = 0.0
-        for e in edges(target)
-            u = src(e)
-            v = dst(e)
-            # total += score_matrix[u,v]
-            total += katz(adj_mat, katz_beta, u, v)
-        end
-        total
-    end
-
-    base_katz_score = target_sum_scorer(base_adj_mat)
+    base_katz_score = katz_sum_scorer(target, base_adj_mat, katz_beta)
     best_diff       = 0.0
     opt_g       = copy(graph)
     opt_adj_mat = copy(base_adj_mat)
@@ -42,8 +42,9 @@ function greedy_katz(graph::SimpleGraph, target::SimpleGraph, budgets,
                 rem_edge!(temp, e)
                 new_opt_adj_mat[src(e), dst(e)] = 0
                 new_opt_adj_mat[dst(e), src(e)] = 0
-                katz_score = target_sum_scorer(new_opt_adj_mat)
+                katz_score = katz_sum_scorer(target, new_opt_adj_mat, katz_beta)
                 diff       = base_katz_score - katz_score
+                # display(diff)
                 if diff > best_diff
                     best_diff = diff
                     new_opt_g = temp
@@ -53,6 +54,7 @@ function greedy_katz(graph::SimpleGraph, target::SimpleGraph, budgets,
                 new_opt_adj_mat[src(e), dst(e)] = 1
                 new_opt_adj_mat[dst(e), src(e)] = 1
             end
+            display(best_diff)
             opt_g = new_opt_g
             new_opt_adj_mat[opt_u, opt_v] = 0
             new_opt_adj_mat[opt_v, opt_u] = 0

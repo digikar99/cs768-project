@@ -78,7 +78,6 @@ end
 include("Heuristics.jl")
 include("CiteSeer.jl")
 include("SRW.jl")
-include("Plotting.jl")
 
 function predict(train_graph::AbstractGraph, scorer::Function;
                               per_node::Bool=PER_NODE, beta::AbstractFloat=0.001,
@@ -163,6 +162,8 @@ include("utils.jl")
 include("CTR.jl")
 include("OTC.jl")
 include("node_embedding_attack.jl")
+
+include("Plotting.jl")
 
 ExportAll.@exportAll()
 

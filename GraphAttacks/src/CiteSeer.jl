@@ -156,7 +156,9 @@ function extract_largest_connected_component(graph::MetaDiGraph, undirected=fals
             label_v = get_label(graph, v)
             ensure_vertex!(new_g, label_u)
             ensure_vertex!(new_g, label_v)
-            add_edge!(new_g, u, v)
+            new_u = new_g[label_u, :label]
+            new_v = new_g[label_v, :label]
+            add_edge!(new_g, new_u, new_v)
         end
     end
 

@@ -2,6 +2,8 @@ module Plotting
 
 using GraphAttacks, LightGraphs
 import ...CiteSeer
+import ...SRW
+import Random
 cs = CiteSeer
 ga = GraphAttacks
 
@@ -76,8 +78,11 @@ function random_flips(train::SimpleGraph,test::SimpleGraph,budgets)
     nv_=nv(train)
     Channel() do channel
         while true
-            if flips>=maximum(budgets)
-                break
+
+            if iter > length(budgets) || flips>=maximum(budgets) break end
+            if budgets[iter] == 0
+                put!(channel,SimpleGraph(train))
+                iter += 1
             end
             add_or_del=rand(1:2)
             if add_or_del==1
@@ -88,8 +93,8 @@ function random_flips(train::SimpleGraph,test::SimpleGraph,budgets)
                     u=rand(1:nv_)
                 end
                 flips+=1
+                add_edge!(train,u,v)
                 if flips==budgets[iter]
-                    add_edge!(train,u,v)
                     put!(channel,SimpleGraph(train))
                     iter+=1
                 end
@@ -101,8 +106,8 @@ function random_flips(train::SimpleGraph,test::SimpleGraph,budgets)
                     u=rand(1:nv_)
                 end
                 flips+=1
+                rem_edge!(train,u,v)
                 if flips==budgets[iter]
-                    rem_edge!(train,u,v)
                     put!(channel,SimpleGraph(train))
                     iter+=1
                 end
@@ -124,7 +129,7 @@ function predict_using_embeddings(train_graph::SimpleGraph,embeddings,
 
     predictions  = nothing
     score_matrix = cosine_sim(embeddings)
-    
+
     if per_node
         predictions = Dict()
         # should "export JULIA_NUM_THREADS=n" in .bashrc to take advantage
@@ -132,7 +137,7 @@ function predict_using_embeddings(train_graph::SimpleGraph,embeddings,
         for u in 1:nv(train_graph)
             predictions[u] = [
                 (u, v, score_matrix[u,v]) for v in 1:nv(train_graph)
-                if !has_edge(train_graph, u, v)
+                if !has_edge(train_graph, u, v) && u != v
             ]
             sort!(predictions[u], by = x -> x[3], rev = true)
             # if u%100 == 0 println("Processed $u nodes") end
@@ -180,46 +185,70 @@ method_predictors = Dict(
                 Array(adjacency_matrix(perturbed_graph)),
                 5, # window_size
                 min(32, nv(perturbed_graph)) # dim; nv of original and perturbed graph is same
+                # min(32, nv(perturbed_graph)) # dim; nv of original and perturbed graph is same
             )
         predict_using_embeddings(perturbed_graph, embeddings, per_node)
-    end
-    
+    end,
+    # "SRW" => (perturbed_graph, per_node) -> begin
+    # println("================== $perturbed_graph ================================")
+    # fcon = "/home/shubhamkar/ram-disk/citeseer/citeseer.content"
+    # features = cs.read_features(fcon, tg, 100)
+    # srw = SRW.make_SRW(tg, features, seed=9)
+    # SRW.fit(srw, )
+    # end
+
 )
 
 dataset_initializer = Dict(
-    "Scale Free (small)" => () -> scale_free(100, 1000, 2),
+    "Scale Free (small)" => () -> begin
+    Random.seed!(0)
+    scale_free(100, 1000, 2)
+    end,
     "Scale Free (large)" => () -> scale_free(600, 10000, 2),
     "CiteSeer" => () -> begin
-        mg = cs.read_into_graph("/home/shubhamkar/ram-disk/citeseer/citeseer.cites")[1]
-        lg = cs.extract_largest_connected_component(mg, true)
-        cs.trim(lg, 3)
+    mg = cs.read_into_graph("/home/shubhamkar/ram-disk/citeseer/citeseer.cites")[1]
+    lg = cs.trim(mg, 5)
+    tg = cs.extract_largest_connected_component(lg, true)
     end
 )
+
+katz_beta = 0.001
 
 attacker_lambdas = Dict(
     "Random Deletion" => (train, test, budgets) ->
         random_del(SimpleGraph(train), budgets),
     "Random Addition" => (train, test, budgets) ->
-        random_add(SimpleGraph(train), budgets),
+        random_add(SimpleGraph(train), test, budgets),
+    "Random Flips" => (train, test, budgets) ->
+        random_flips(SimpleGraph(train), test, budgets),
     "CTR" => (train, test, budgets) ->
         closed_triad_removal(SimpleGraph(train), test, budgets),
     "OTC" => (train, test, budgets) ->
         open_triad_creation(SimpleGraph(train), test, budgets),
     "Greedy Katz" => (train, test, budgets) ->
-        greedy_katz(SimpleGraph(train), test, budgets, 0.001),
+        greedy_katz(SimpleGraph(train), test, budgets, katz_beta),
+    "Node Embedding Attack" => (train, test, budgets) ->
+        node_embedding_attack(SimpleGraph(train), test, budgets, min(32, nv(train)))
 )
 
 
 function emit_evaluation_data(dataset::String, attack_method;
-                              budgets=[10 20 30 40 50], per_node=true,
+                              budgets=[10 20 30 40 50],
                               train_fraction=0.8, seed=0)
-    
+
     map_scores = Dict(
         "Adamic Adar" => [],
         "Katz" => [],
         "Deep Walk" => [],
         "SRW" => []
     )
+    ap_scores = Dict(
+        "Adamic Adar" => [],
+        "Katz" => [],
+        "Deep Walk" => [],
+        "SRW" => []
+    )
+    katz_sim_scores = []
 
     full_graph  = dataset_initializer[dataset]()
     train, test = create_train_test_graph(full_graph, train_fraction, seed)
@@ -233,14 +262,46 @@ function emit_evaluation_data(dataset::String, attack_method;
         print("Perturbed Graph $i (budget $(budgets[i])): "); display(perturbed_graph)
         i += 1
         for method in permissible_methods[dataset]
-            pred = method_predictors[method](perturbed_graph, per_node)
+            pred = method_predictors[method](perturbed_graph, true)
             push!(
                 map_scores[method],
-                ga.evaluate(perturbed_graph, test, pred, average_precision, per_node = per_node)
+                ga.evaluate(perturbed_graph, test, pred, average_precision, per_node = true)
+            )
+            if method=="Katz" || method=="Random Deletion"
+                push!(
+                    katz_sim_scores,
+                    katz_sum_scorer(
+                        test,
+                        float(Matrix(LightGraphs.LinAlg.adjacency_matrix(perturbed_graph))),
+                        katz_beta
+                    )
+                )
+            end
+            pred = method_predictors[method](perturbed_graph, false)
+            push!(
+                ap_scores[method],
+                ga.evaluate(perturbed_graph, test, pred, average_precision, per_node = false)
             )
         end
     end
-    map_scores
+    map_scores, ap_scores, katz_sim_scores
+end
+
+function print_for_pyplot(budgets, scores)
+
+    print("Budget ")
+    for budget in budgets
+        print("$budget ")
+    end
+    print("\n")
+
+    for method in keys(scores)
+        println("$method")
+        for score in scores[method]
+            print("$score ")
+        end
+        print("\n")
+    end
 end
 
 # p = Plotting
@@ -270,7 +331,7 @@ function main()
             create_simple_graph("//home/chitrank/cs768_datasets/datasets/GRQ_test_0.net")
         end
     end
-    dim=min(32,nv(g)) 
+    dim=min(32,nv(g))
     window_size=5
 
     budgets = [10*(1:5)...]
