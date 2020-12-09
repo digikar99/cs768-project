@@ -6,6 +6,9 @@ using LinearAlgebra
 using LightGraphs
 using Random
 
+import ..GraphAttacks
+ga = GraphAttacks
+
 # The following code is based on: https://arxiv.org/abs/1011.4071 ##############
 
 MAX_ITERATIONS = 10000
@@ -333,29 +336,117 @@ function grad_term_2(srw::SupervisedRandomWalker, loss_fn_grad=hinge_loss_grad)
 end
 
 # TODO: Add option to avoid regularization
-function fit(srw::SupervisedRandomWalker; target_loss=1e-3,
-             learning_rate=0.1, num_epochs=10)
+function fit(srw::SupervisedRandomWalker, test;
+             target_loss=1e-3,
+             learning_rate=0.1, num_epochs=10, lambda=1, seed=0)
+    Random.seed!(seed)
     graph         = srw.graph
+    train         = graph
     node_features = srw.node_features
     weights       = srw.weights
-    regularized_loss_score = loss(srw)[2]
+    loss_score = loss(srw)
     epoch_completed = 0
+    last_loss     = nothing
+    grad          = nothing
 
-    while regularized_loss_score > target_loss && epoch_completed < num_epochs
+    srw_maps      = []
+    lr_threshold  = 1e-16
+
+    function print_epoch_details()
+        println("Epoch $epoch_completed\n  Old Loss: $last_loss New Loss: $loss_score")
+        pred = ga.predict(train, x -> predict(srw), per_node=true, include_train_edges=true)
+        println("  Train Set MAP: ",
+        ga.evaluate(train, train, pred, ga.average_precision, per_node = true))
+        println("  Test Set MAP:  ",
+                srw_maps[end])
+    end
+
+    while learning_rate > lr_threshold &&
+        loss_score[2] > target_loss && epoch_completed < num_epochs
+
         predict(srw)
-        println("Epoch $epoch_completed Loss: $regularized_loss_score")
+        loss_score = loss(srw, lambda=lambda)
+        pred = ga.predict(train, x -> predict(srw), per_node=true)
+        push!(srw_maps, ga.evaluate(train, test, pred, ga.average_precision, per_node = true))
+        print_epoch_details()
+        if last_loss != nothing
+            while last_loss[2] < loss_score[2]
+                weights .+= learning_rate*grad
+                learning_rate *= 0.5
+                if learning_rate < lr_threshold break end
+                println("  Decreased learning rate to $learning_rate")
+                weights .-= learning_rate*grad
+                pred = ga.predict(train, x -> predict(srw), per_node=true)
+                loss_score = loss(srw, lambda=lambda)
+            end
+        end
+        last_loss = loss_score
         # weights (and therefore, grad) should be a vector of length num_weights
         # and therefore, also the value returned by grad_term_2
-        grad = 2*weights + grad_term_2(srw)
+        grad = 2*weights + lambda*grad_term_2(srw)
         weights .-= learning_rate*grad
-        regularized_loss_score = loss(srw)[2]
         epoch_completed += 1
     end
     predict(srw)
-    println("Epoch $epoch_completed Loss: $regularized_loss_score")
+    loss_score = loss(srw, lambda=lambda)
+    pred = ga.predict(train, x -> SRW.predict(srw), per_node=true)
+    push!(srw_maps, ga.evaluate(train, test, pred, ga.average_precision, per_node = true))
+    print_epoch_details()
+    srw_maps
 end
 
 end # end SRW module
+
+# inside GraphAttacks module
+
+# function fit_srw(srw::SupervisedRandomWalker, test, predict_fn, metric, evaluate_fn;
+#              target_loss=1e-3,
+#              learning_rate=0.1, num_epochs=10, lambda=1, seed=0)
+#     Random.seed!(seed)
+#     graph         = srw.graph
+#     train         = graph
+#     node_features = srw.node_features
+#     weights       = srw.weights
+#     loss_score = loss(srw)
+#     epoch_completed = 0
+#     last_loss     = nothing
+#     grad          = nothing
+
+#     srw_maps      = []
+#     lr_threshold  = 1e-20
+#     while learning_rate > lr_threshold &&
+#         loss_score[2] > target_loss && epoch_completed < num_epochs
+
+#         predict(srw)
+#         loss_score = loss(srw, lambda=lambda)
+#         pred = predict_fn(train, x -> predict(srw), per_node=true)
+#         push!(srw_maps, evaluate_fn(train, test, pred, metric, per_node = true))
+#         println("Epoch $epoch_completed Old Loss: $last_loss New Loss: $loss_score SRW: ", srw_maps[end])
+#         if last_loss != nothing
+#             while last_loss[2] < loss_score[2]
+#                 weights .+= learning_rate*grad
+#                 learning_rate *= 0.5
+#                 if learning_rate < lr_threshold break end
+#                 println("  Decreased learning rate to $learning_rate")
+#                 weights .-= learning_rate*grad
+#                 pred = predict_fn(train, x -> predict(srw), per_node=true)
+#                 loss_score = loss(srw, lambda=lambda)
+#             end
+#         end
+#         last_loss = loss_score
+#         # weights (and therefore, grad) should be a vector of length num_weights
+#         # and therefore, also the value returned by grad_term_2
+#         grad = 2*weights + lambda*grad_term_2(srw)
+#         weights .-= learning_rate*grad
+#         epoch_completed += 1
+#     end
+#     predict(srw)
+#     loss_score = loss(srw, lambda=lambda)
+#     println("Epoch $epoch_completed Old Loss: $last_loss New Loss: $loss_score SRW: ", srw_maps[end])
+#     pred = predict_fn(train, x -> SRW.predict(srw), per_node=true)
+#     push!(srw_maps, evaluate_fn(train, test, pred, metric, per_node = true))
+#     srw_maps
+# end
 
 
 # fcon = "/home/shubhamkar/ram-disk/citeseer/citeseer.content"
