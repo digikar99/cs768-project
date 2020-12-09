@@ -81,6 +81,46 @@ function read_features(filename, graph, num_features=nothing)
     F.U[:, 1:num_features]
 end
 
+function read_last_features(filename, graph)
+    features = nothing
+    num_total_features = 6
+    num_total_nodes = nv(graph)
+    feature_id_dict = Dict()
+
+    # open(filename) do f
+    #     split_line = split(readline(f))
+    #     num_total_features = length(split_line[2:end-1])
+    #     if num_features == nothing num_features = length(split_line[2:end-1]) end
+    features = zeros(Bool, num_total_nodes, num_total_features)
+    # end
+
+    i = 0
+    open(filename) do f
+        while !eof(f) # && i < 5
+            i += 1
+            # Should be possible to speed up by avoiding allocations
+            split_line = split(readline(f))
+            label = split_line[1]
+            # println("Line $label")
+            if ! isempty(filter_vertices(graph, :label, label))
+                # println("Reading $label")
+                id      = graph[label, :label]
+                feature = split_line[end]
+                feature_id = nothing
+                if feature in keys(feature_id_dict)
+                    feature_id = feature_id_dict[feature]
+                else
+                    feature_id = length(feature_id_dict)+1
+                    feature_id_dict[feature] = feature_id
+                end
+                features[id, feature_id] = 1
+            end
+        end
+    end
+
+    features
+end
+
 function ensure_vertex!(graph, label)
     if isempty(filter_vertices(graph, :label, label))
         add_vertex!(graph)
