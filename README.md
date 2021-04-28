@@ -1,4 +1,3 @@
-
 # Link Predictors against Adversarial Attacks
 
 > For best experience, use in conjunction with [Revise.jl](https://github.com/timholy/Revise.jl)
