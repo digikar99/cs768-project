@@ -1,5 +1,5 @@
 # Link Predictors against Adversarial Attacks
-
+Authors:- Shubhamkar Ayare, Chitrank Gupta (IIT Bombay)
 > For best experience, use in conjunction with [Revise.jl](https://github.com/timholy/Revise.jl)
 
 Once loaded into Revise, revise Plotting.jl to suit your needs; so inside the REPL,
